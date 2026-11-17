@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blockcraft</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#87ceeb;font-family:sans-serif}
+  canvas{width:100%;height:100%;display:block}
+  #cross{position:fixed;left:50%;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px;pointer-events:none}
+  #cross:before,#cross:after{content:"";position:absolute;background:#fff;mix-blend-mode:difference}
+  #cross:before{left:8px;top:0;width:2px;height:18px}
+  #cross:after{left:0;top:8px;width:18px;height:2px}
+  #hotbar{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);display:flex;gap:4px}
+  .slot{width:48px;height:48px;border:3px solid #333;box-sizing:border-box;opacity:.85;position:relative;background:#555!important}.slot .slot-count{position:absolute;right:3px;bottom:1px;font-size:13px;font-weight:bold;text-shadow:1px 1px 2px #000}.slot.empty{background:#333!important;opacity:.65}
+  .slot.sel{border-color:#fff;opacity:1}
+  #info{position:fixed;top:8px;left:8px;color:#fff;text-shadow:1px 1px 2px #000;font-size:13px;pointer-events:none}
+  #start{position:fixed;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5);color:#fff;text-align:center;cursor:pointer;line-height:1.7}
+
+  #menu{position:fixed;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;background:rgba(8,14,20,.88);color:#fff}
+  #menuPanel{width:min(560px,92vw);max-height:86vh;overflow:auto;background:#202b35;border:2px solid #718596;border-radius:14px;padding:22px;box-shadow:0 15px 55px #000}
+  #menu h1{margin:0 0 8px;font-size:32px;color:#b8e6ff}
+  #menu button,#menu input{font:inherit;border:1px solid #718596;border-radius:7px;padding:9px 12px;margin:4px;background:#344858;color:white}
+  #menu button{cursor:pointer;background:#386b50} #menu button:hover{filter:brightness(1.2)}
+  #worldList{display:grid;gap:7px;margin-top:12px}
+  .worldRow{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#2d3b47;padding:9px;border-radius:8px}
+  .worldRow small{display:block;color:#c3d0d8}
+  #survival{position:fixed;top:8px;right:12px;color:#fff;text-shadow:1px 2px 3px #000;font-weight:bold;text-align:right;pointer-events:none}
+  #toast{position:fixed;top:58px;left:50%;transform:translateX(-50%);color:white;background:#17232ddd;padding:8px 14px;border-radius:8px;display:none;pointer-events:none}
+  #inventoryPanel{position:fixed;z-index:8;left:50%;top:50%;transform:translate(-50%,-50%);width:min(760px,94vw);max-height:86vh;overflow:auto;background:rgba(25,35,43,.97);color:#fff;border:3px solid #9ba9ad;border-radius:12px;padding:18px;display:none;box-shadow:0 16px 60px #000}
+  #inventoryPanel h2{margin:0 0 10px;color:#333;text-shadow:1px 1px #fff}
+  #inventoryPanel{background:rgba(198,198,198,.98);color:#222;border:4px solid #555;border-radius:2px;box-shadow:0 0 0 3px #222,0 18px 65px #000;font-family:Arial,sans-serif}#inventoryPanel h3{color:#333;text-shadow:1px 1px #fff}#inventoryPanel p{color:#333}#inventoryHotbar{display:grid;grid-template-columns:repeat(8,minmax(42px,1fr));gap:5px;max-width:700px;margin:8px 0 14px}.mc-slot{background:#8b8b8b;border:3px solid;border-color:#373737 #fff #fff #373737;box-shadow:inset 1px 1px #555;cursor:pointer}.mc-slot.empty{background:#8b8b8b;opacity:1}.mc-slot .item-label{display:none}.mc-slot .item-icon{width:72%;height:72%;margin:auto;background-size:cover;image-rendering:pixelated;filter:drop-shadow(1px 2px 1px #333)}.mc-slot .item-count{font-size:14px;color:#fff;text-shadow:2px 2px #222;z-index:1}.mc-slot.selected{outline:3px solid #222;outline-offset:1px}
+  #inventoryPanel h3{margin:16px 0 7px;color:#b8d8c4}
+  #inventoryGrid{display:grid;grid-template-columns:repeat(5,minmax(48px,1fr));gap:5px}.mc-slot{aspect-ratio:1;background:linear-gradient(145deg,#8b8b8b,#555);border:3px solid;border-color:#eee #333 #333 #eee;box-shadow:inset 2px 2px #aaa;display:flex;align-items:flex-end;justify-content:flex-end;padding:5px;box-sizing:border-box;color:#fff;text-shadow:1px 1px 2px #000;font-weight:bold;position:relative;min-width:0}.mc-slot.empty{background:linear-gradient(145deg,#777,#555);opacity:.72}.mc-slot .item-label{position:absolute;left:4px;top:4px;font-size:10px;line-height:1.1;max-width:85%;overflow-wrap:anywhere}.mc-slot .item-count{font-size:13px}#furnacePanel,#bedPanel{background:#303b40;border:3px solid #777;padding:10px;margin:6px 0 12px}.invItem{background:#34434d;border:1px solid #71818a;border-radius:7px;padding:8px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+  .invItem,.recipe{background:#34434d;border:1px solid #71818a;border-radius:7px;padding:8px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+  #recipeGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:7px}
+  #inventoryPanel button{background:#477b55;color:white;border:1px solid #a9c5af;border-radius:6px;padding:7px;cursor:pointer}
+  #inventoryPanel button:disabled{opacity:.35;cursor:not-allowed}
+  #inventoryClose{float:right}
+  .foodBtn{background:#8b6635!important}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="cross"></div>
+<div id="hotbar"></div>
+<div id="info"></div><div id="survival"></div><div id="toast"></div>
+<div id="inventoryPanel">
+  <button id="inventoryClose">Close (E)</button><h2>Inventory & Crafting</h2>
+  <p>Collect materials by mining blocks. Select a recipe to craft it from your gathered items.</p>
+  <h3>Hotbar</h3><div id="inventoryHotbar"></div><h3>Inventory (20 slots)</h3><div id="inventoryGrid" class="mc-grid"></div>
+  <h3>Furnace</h3><div id="furnacePanel"><p id="furnaceStatus">Place a furnace nearby to smelt ore and cook food.</p><button id="addFuel">Add coal as fuel</button> <button id="smeltIron">Smelt iron ore</button> <button id="cookMeat">Cook raw meat</button></div>
+  <h3>Bed</h3><div id="bedPanel"><p id="bedStatus">Place a bed nearby to sleep until morning.</p><button id="sleepButton">Sleep until morning</button></div>
+  <h3>Equipped armor</h3><div id="armorGrid"></div>
+  <h3>Crafting recipes</h3><div id="recipeGrid"></div>
+  <p><small>Tip: place a furnace or crafting table and stand nearby for station recipes. Click food to eat, or click Plant on seeds while looking at grass/dirt.</small></p>
+</div>
+<div id="menu"><div id="menuPanel"><h1>Blockcraft</h1><p>Create a world or continue one you saved. Worlds are 500 × 500 blocks and use nearby chunk rendering to help performance. Worlds are stored in this browser.</p><input id="worldName" maxlength="24" placeholder="World name" value="My World"><br><button id="createCreative">New Creative World</button><button id="createSurvival">New Survival World</button><button id="importWorld">Import World</button><input id="importFile" type="file" accept=".json,.blockcraft.json,application/json" style="display:none"><h3>Saved worlds</h3><div id="worldList"></div><p><small>Tip: your worlds save automatically in this browser. Use Export World for a backup.</small></p></div></div>
+<div id="start"><div>
+  <h1>Blockcraft</h1>
+  <div>Click to return to the game</div>
+  <div>WASD move &middot; Space jump &middot; Shift sprint</div>
+  <div>Mouse look &middot; Left click break &middot; Right click place</div>
+  <div>1&ndash;8 or scroll wheel to pick a block &middot; E inventory &middot; Esc to pause</div><div>Survival: collect blocks, watch your health and hunger!</div><div>E inventory & crafting · Place a furnace/table and stand nearby to use station recipes</div><div>Night brings hostile mobs · Bows need arrows · Plant seeds from inventory</div><div><button id="worldsButton" style="margin-top:12px;padding:8px 16px;cursor:pointer">Worlds / Save menu</button></div>
+</div></div>
+
+<script>
+(function () {
+"use strict";
+
+// ---------- World data ----------
+var W = 500, D = 500, H = 40, CS = 16;
+var NCX = Math.ceil(W / CS), NCZ = Math.ceil(D / CS);
+var worldSeed = 1, worldEdits = {}, builtChunks = {}, lastChunkX = -1, lastChunkZ = -1;
+var gameTime = 0, dayPhase = 0, hostileSpawnClock=0;
+var world = new Uint8Array(W * D * H);
+var worldName = "My World", worldMode = "creative", currentWorldId = null;
+var health = 20, hunger = 20, mobs = [], saveClock = 0, damageClock = 0, hungerClock=0;
+var inventory = {};
+var groundDrops = [];
+var miningTarget = null, miningProgress = 0;
+
+function idx(x, y, z) { return (y * D + z) * W + x; }
+function get(x, y, z) {
+  if (y < 0) return 1;
+  if (y >= H || x < 0 || z < 0 || x >= W || z >= D) return 0;
+  return world[idx(x, y, z)];
+}
+function solid(x, y, z) {
+  if (y < 0 || x < 0 || z < 0 || x >= W || z >= D) return true;
+  if (y >= H) return false;
+  return world[idx(x, y, z)] !== 0;
+}
+function set(x, y, z, b) {
+  if (x < 0 || z < 0 || y < 0 || x >= W || z >= D || y >= H) return;
+  world[idx(x, y, z)] = b;
+}
+
+// Block colors: [top, side, bottom] in RGB 0-255
+var COL = {
+  1: [[90,160,60],  [112,130,60], [121,85,58]],
+  2: [[121,85,58],  [121,85,58],  [121,85,58]],
+  3: [[125,125,125],[125,125,125],[125,125,125]],
+  4: [[170,135,80], [102,76,45],  [170,135,80]],
+  5: [[176,140,85], [176,140,85], [176,140,85]],
+  6: [[50,125,45],  [50,125,45],  [50,125,45]],
+  7: [[160,70,60],  [160,70,60],  [160,70,60]],
+  8: [[220,220,220],[190,190,190],[150,150,150]],
+  9: [[205,175,120],[165,125,75],[130,95,55]],
+  10:[[80,150,190],[55,115,155],[35,80,120]],
+  11:[[190,190,205],[145,145,165],[105,105,125]],
+  12:[[235,205,65],[190,155,35],[145,110,25]],
+  13:[[80,185,165],[50,145,125],[30,105,90]],
+  14:[[145,95,185],[110,65,150],[75,40,110]],
+  15:[[235,125,55],[190,85,30],[130,55,20]],
+  16:[[45,45,48],[30,30,34],[20,20,22]],
+  17:[[180,145,105],[125,95,65],[85,65,48]],
+  18:[[120,82,48],[90,58,32],[60,38,24]],
+  19:[[105,105,110],[70,70,76],[45,45,50]],
+  20:[[150,105,62],[105,70,40],[70,45,28]],
+  21:[[135,88,42],[95,58,28],[60,36,18]],
+  22:[[80,155,55],[55,120,35],[35,85,25]],
+  23:[[175,65,65],[135,45,45],[95,35,35]]
+};
+var BLOCK_NAMES = ["Grass","Dirt","Stone","Wood","Planks","Leaves","Brick","Sand","Snow","Water","Glass","Gold","Copper","Amethyst","Clay","Coal Ore","Iron Ore","Log","Furnace","Crafting Table","Chest","Crops","Bed"];
+var HOT = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23];
+var sel = 0;
+
+// ---------- Terrain ----------
+function hash(x, z) { var n = Math.sin(x * 127.1 + z * 311.7 + worldSeed * 0.731) * 43758.5453; return n - Math.floor(n); }
+function hash3(x, y, z) { var n = Math.sin(x * 127.1 + y * 269.5 + z * 311.7 + worldSeed * 0.917) * 43758.5453; return n - Math.floor(n); }
+function noise(x, z) {
+  var xi = Math.floor(x), zi = Math.floor(z), xf = x - xi, zf = z - zi;
+  var u = xf * xf * (3 - 2 * xf), v = zf * zf * (3 - 2 * zf);
+  var a = hash(xi, zi), b = hash(xi + 1, zi), c = hash(xi, zi + 1), d = hash(xi + 1, zi + 1);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+function topY(x, z) {
+  for (var y = H - 1; y >= 0; y--) if (world[idx(x, y, z)]) return y;
+  return -1;
+}
+function generate() {
+  var x, y, z;
+  for (x = 0; x < W; x++) for (z = 0; z < D; z++) {
+    var h = Math.floor(8 + noise(x / 42, z / 42) * 12 + noise(x / 13, z / 13) * 4);
+    var biome=noise(x/105+41,z/105-17);
+    for (y = 0; y <= h; y++) {
+      var block = (y === h) ? (biome<.24?8:(biome>.78?9:1)) : (y > h - 4 ? 2 : 3);
+      var cave= y>3 && y<h-4 && hash3(Math.floor(x/3),Math.floor(y/2),Math.floor(z/3))>.965;
+      if(cave) continue;
+      if (y < h - 3 && y > 2 && hash3(x,y,z) > 0.991) {
+        var oreRoll=hash3(x+9,y,z+4); block=oreRoll>.72?17:(oreRoll>.38?16:13);
+      }
+      world[idx(x, y, z)] = block;
+    }
+  }
+  for (x = 3; x < W - 3; x++) for (z = 3; z < D - 3; z++) {
+    if (hash(x * 5.7 + 1.3, z * 3.9 + 7.1) < 0.99) continue;
+    var ty = topY(x, z);
+    if (ty < 0 || world[idx(x, ty, z)] !== 1) continue;
+    var th = 4 + Math.floor(hash(x, z) * 2);
+    for (var dy = th - 1; dy <= th + 1; dy++)
+      for (var dx = -2; dx <= 2; dx++) for (var dz = -2; dz <= 2; dz++) {
+        if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
+        if (dy === th + 1 && (Math.abs(dx) > 1 || Math.abs(dz) > 1)) continue;
+        if (!get(x + dx, ty + dy, z + dz)) set(x + dx, ty + dy, z + dz, 6);
+      }
+    for (var t = 1; t <= th; t++) set(x, ty + t, z, 18);
+  }
+  // Long winding underground tunnels connect some of the smaller cave pockets.
+  for(var tunnel=0;tunnel<8;tunnel++){
+    var startZ=35+tunnel*57+Math.floor(hash(tunnel,worldSeed)*18);
+    for(var tx=8;tx<W-8;tx++){
+      var centerY=7+Math.floor((Math.sin(tx/24+tunnel)*1.8+Math.sin(tx/51+tunnel*2)*1.4));
+      var centerZ=startZ+Math.floor(Math.sin(tx/31+tunnel)*5);
+      for(var oy=-2;oy<=2;oy++)for(var oz=-2;oz<=2;oz++){
+        if(oy*oy+oz*oz>5)continue;
+        var cz2=centerZ+oz,yy2=centerY+oy;
+        if(cz2>1&&cz2<D-1&&yy2>2&&yy2<H-1&&yy2<topY(tx,cz2)-3)set(tx,yy2,cz2,0);
+      }
+    }
+  }
+  // Procedural structures are placed at deterministic coordinates for each world seed.
+  function clearPad(cx,cz,rx,rz){
+    for(var ax=cx-rx;ax<=cx+rx;ax++)for(var az=cz-rz;az<=cz+rz;az++){
+      if(ax<2||az<2||ax>=W-2||az>=D-2)continue;
+      var gy=topY(ax,az);if(gy<0)continue;
+      for(var yy=gy+1;yy<H;yy++)set(ax,yy,az,0);
+      set(ax,gy,az,2);
+    }
+  }
+  function house(cx,cz){
+    clearPad(cx,cz,5,5);var base=topY(cx,cz)+1;
+    for(var ax=-4;ax<=4;ax++)for(var az=-4;az<=4;az++){
+      set(cx+ax,base,cz+az,5);
+      if(Math.abs(ax)===4||Math.abs(az)===4){
+        for(var yy=1;yy<=3;yy++){
+          if((ax===0&&az===-4&&yy<3)||(Math.abs(ax)===4&&Math.abs(az)===4))continue;
+          set(cx+ax,base+yy,cz+az,4);
+        }
+      }
+    }
+    for(var ax=-4;ax<=4;ax++)for(var az=-4;az<=4;az++)
+      if(Math.abs(ax)+Math.abs(az)<=6)set(cx+ax,base+4-Math.floor((Math.abs(ax)+Math.abs(az))/4),cz+az,7);
+    set(cx,base+1,cz-4,0);set(cx,base+2,cz-4,0);
+    set(cx+2,base+1,cz-4,11);set(cx-2,base+1,cz-4,11);
+    set(cx,base+1,cz,21);
+  }
+  function village(cx,cz){
+    for(var i=0;i<4;i++){var ang=i*Math.PI/2;house(cx+Math.round(Math.cos(ang)*13),cz+Math.round(Math.sin(ang)*13));}
+    var gy=topY(cx,cz)+1;
+    for(var ax=-2;ax<=2;ax++)for(var az=-2;az<=2;az++)set(cx+ax,gy,cz+az,9);
+    set(cx,gy+1,cz,20);
+    mobs.push({x:cx+.5,y:gy+1,z:cz+.5,phase:0,type:4,hp:8,dir:0,turn:0,name:"Villager"});
+  }
+  function temple(cx,cz){
+    clearPad(cx,cz,11,11);var base=topY(cx,cz)+1;
+    for(var layer=0;layer<6;layer++){
+      var r=10-layer*2;
+      for(var ax=-r;ax<=r;ax++)for(var az=-r;az<=r;az++)
+        if(Math.abs(ax)===r||Math.abs(az)===r||layer===0)set(cx+ax,base+layer,cz+az,7);
+    }
+    for(var yy=1;yy<=4;yy++){set(cx,base+yy,cz-10,0);set(cx,base+yy,cz-9,0);}
+    set(cx,base+1,cz,21);set(cx+2,base+1,cz,12);set(cx-2,base+1,cz,14);
+  }
+  function castle(cx,cz){
+    clearPad(cx,cz,18,18);var base=topY(cx,cz)+1;
+    for(var ax=-15;ax<=15;ax++)for(var az=-15;az<=15;az++){
+      if(Math.abs(ax)===15||Math.abs(az)===15){
+        for(var yy=0;yy<7;yy++)set(cx+ax,base+yy,cz+az,7);
+      }
+    }
+    for(var tx of [-15,15])for(var tz of [-15,15]){
+      for(var yy=0;yy<13;yy++)for(var ax=-2;ax<=2;ax++)for(var az=-2;az<=2;az++)set(cx+tx+ax,base+yy,cz+tz+az,7);
+      for(var ax=-2;ax<=2;ax++)for(var az=-2;az<=2;az++)set(cx+tx+ax,base+13,cz+tz+az,7);
+    }
+    set(cx,base+1,cz,19);
+    for(var ax=-5;ax<=5;ax++)for(var az=-5;az<=5;az++){
+      set(cx+ax,base,cz+az,5);
+      if(Math.abs(ax)===5||Math.abs(az)===5)for(var yy=1;yy<7;yy++)set(cx+ax,base+yy,cz+az,7);
+    }
+    for(var yy=1;yy<4;yy++)for(var ax=-1;ax<=1;ax++)set(cx+ax,base+yy,cz-15,0);
+    set(cx,base+1,cz,21);
+  }
+  var candidates=[
+    [65,75,"v"],[205,110,"v"],[390,160,"v"],[115,365,"t"],[365,385,"c"],[260,285,"t"]
+  ];
+  candidates.forEach(function(c){
+    var cx=c[0]+Math.floor(hash(c[0],c[1])*19-9),cz=c[1]+Math.floor(hash(c[1],c[0])*19-9);
+    if(c[2]==="v")village(cx,cz);else if(c[2]==="t")temple(cx,cz);else castle(cx,cz);
+  });
+  // A few shallow ponds give the terrain some water features.
+  [[170,245],[440,70],[285,430],[35,330]].forEach(function(pt){
+    var cx=pt[0],cz=pt[1],gy=topY(cx,cz);
+    for(var ax=-5;ax<=5;ax++)for(var az=-5;az<=5;az++){
+      if(ax*ax+az*az>25)continue;
+      var yy=topY(cx+ax,cz+az);
+      if(yy>0){set(cx+ax,yy,cz+az,10);if(yy>1)set(cx+ax,yy-1,cz+az,2);}
+    }
+  });
+}
+
+// ---------- WebGL ----------
+var canvas = document.getElementById("c");
+var gl = canvas.getContext("webgl", { antialias: false });
+if (!gl) { document.body.innerHTML = "<p style='padding:20px'>WebGL isn't supported in this browser.</p>"; return; }
+
+function shader(type, src) {
+  var s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+var prog = gl.createProgram();
+gl.attachShader(prog, shader(gl.VERTEX_SHADER,
+  "attribute vec3 p;attribute vec3 c;uniform mat4 m;varying vec3 vc;varying float vd;" +
+  "void main(){gl_Position=m*vec4(p,1.0);vc=c;vd=gl_Position.w;}"));
+gl.attachShader(prog, shader(gl.FRAGMENT_SHADER,
+  "precision mediump float;varying vec3 vc;varying float vd;" +
+  "void main(){float f=clamp((vd-45.0)/60.0,0.0,1.0);" +
+  "gl_FragColor=vec4(mix(vc,vec3(0.53,0.81,0.92),f),1.0);}"));
+gl.linkProgram(prog);
+gl.useProgram(prog);
+var aP = gl.getAttribLocation(prog, "p");
+var aC = gl.getAttribLocation(prog, "c");
+var uM = gl.getUniformLocation(prog, "m");
+gl.enableVertexAttribArray(aP);
+gl.enableVertexAttribArray(aC);
+gl.enable(gl.DEPTH_TEST);
+
+// ---------- Matrices (column-major) ----------
+function mul(a, b) {
+  var o = new Float32Array(16);
+  for (var i = 0; i < 4; i++) for (var j = 0; j < 4; j++) {
+    var s = 0;
+    for (var k = 0; k < 4; k++) s += a[k * 4 + j] * b[i * 4 + k];
+    o[i * 4 + j] = s;
+  }
+  return o;
+}
+function persp(fov, asp, n, f) {
+  var t = 1 / Math.tan(fov / 2);
+  return new Float32Array([t / asp,0,0,0, 0,t,0,0, 0,0,(f + n) / (n - f),-1, 0,0,2 * f * n / (n - f),0]);
+}
+function rotY(a) { var c = Math.cos(a), s = Math.sin(a); return new Float32Array([c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1]); }
+function rotX(a) { var c = Math.cos(a), s = Math.sin(a); return new Float32Array([1,0,0,0, 0,c,s,0, 0,-s,c,0, 0,0,0,1]); }
+function trans(x, y, z) { return new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, x,y,z,1]); }
+
+// ---------- Meshing ----------
+var FACES = [
+  { n: [1,0,0],  s: 0.8,  k: 1, c: [[1,0,0],[1,1,0],[1,1,1],[1,0,1]] },
+  { n: [-1,0,0], s: 0.8,  k: 1, c: [[0,0,1],[0,1,1],[0,1,0],[0,0,0]] },
+  { n: [0,1,0],  s: 1.0,  k: 0, c: [[0,1,1],[1,1,1],[1,1,0],[0,1,0]] },
+  { n: [0,-1,0], s: 0.55, k: 2, c: [[0,0,0],[1,0,0],[1,0,1],[0,0,1]] },
+  { n: [0,0,1],  s: 0.7,  k: 1, c: [[1,0,1],[1,1,1],[0,1,1],[0,0,1]] },
+  { n: [0,0,-1], s: 0.7,  k: 1, c: [[0,0,0],[0,1,0],[1,1,0],[1,0,0]] }
+];
+var ORDER = [0, 1, 2, 0, 2, 3];
+
+function facePoint(F,u,v){
+  var a=F.c[0],b=F.c[1],c=F.c[2],d=F.c[3],pt=[];
+  for(var axis=0;axis<3;axis++){
+    pt[axis]=a[axis]*(1-u)*(1-v)+d[axis]*u*(1-v)+
+             b[axis]*(1-u)*v+c[axis]*u*v;
+  }
+  return pt;
+}
+function buildChunk(cx, cz) {
+  var out = [];
+  for (var y = 0; y < H; y++)
+    for (var z = cz * CS; z < Math.min(D,cz * CS + CS); z++)
+      for (var x = cx * CS; x < Math.min(W,cx * CS + CS); x++) {
+        var b = world[idx(x, y, z)];
+        if (!b) continue;
+        var v = 0.82 + hash3(x, y, z) * 0.30;
+        for (var f = 0; f < 6; f++) {
+          var F = FACES[f];
+          if (get(x + F.n[0], y + F.n[1], z + F.n[2])) continue;
+          var col = COL[b][F.k], sh = F.s * v;
+          // Small color-varied face tiles create a richer, pixel-textured look without external images.
+          var grid=3;
+          for(var ty=0;ty<grid;ty++) for(var tx=0;tx<grid;tx++){
+            var variation=.82+hash3(x*17+tx+f*7,y*13+ty,z*19+f*3)*.34;
+            var r=col[0]/255*sh*variation,g=col[1]/255*sh*variation,bl=col[2]/255*sh*variation;
+            var u0=tx/grid,u1=(tx+1)/grid,v0=ty/grid,v1=(ty+1)/grid;
+            // Interpolate across the face in its local 2D coordinates.
+            // Each face corner is ordered as: bottom-left, top-left,
+            // top-right, bottom-right. The previous interpolation mixed
+            // axes, producing enormous crossed triangles instead of cubes.
+            var q=[facePoint(F,u0,v0),facePoint(F,u1,v0),facePoint(F,u1,v1),facePoint(F,u0,v1)];
+            for(var qi=0;qi<6;qi++){var c=q[ORDER[qi]];out.push(x+c[0],y+c[1],z+c[2],r,g,bl);}
+          }
+        }
+      }
+  return new Float32Array(out);
+}
+
+var chunks = [];
+function rebuild(cx, cz) {
+  if (cx < 0 || cz < 0 || cx >= NCX || cz >= NCZ) return;
+  var data = buildChunk(cx, cz);
+  var i = cz * NCX + cx;
+  var ch = chunks[i] || (chunks[i] = { buf: gl.createBuffer(), n: 0 });
+  gl.bindBuffer(gl.ARRAY_BUFFER, ch.buf);
+  gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+  ch.n = data.length / 6;
+  builtChunks[cx+","+cz]=true;
+}
+function ensureVisibleChunks(force){
+  var pcx=Math.floor(P.x/CS),pcz=Math.floor(P.z/CS),radius=2;
+  if(!force&&pcx===lastChunkX&&pcz===lastChunkZ)return;
+  lastChunkX=pcx;lastChunkZ=pcz;
+  var keep={};
+  for(var cz=pcz-radius;cz<=pcz+radius;cz++)for(var cx=pcx-radius;cx<=pcx+radius;cx++){
+    if(cx<0||cz<0||cx>=NCX||cz>=NCZ)continue;
+    var key=cx+","+cz;keep[key]=true;
+    if(!builtChunks[key])rebuild(cx,cz);
+  }
+  Object.keys(builtChunks).forEach(function(key){
+    if(!keep[key]){
+      var parts=key.split(","),i=Number(parts[1])*NCX+Number(parts[0]),ch=chunks[i];
+      if(ch&&ch.buf){gl.deleteBuffer(ch.buf);chunks[i]=null;}
+      delete builtChunks[key];
+    }
+  });
+}
+function edit(x, y, z, b) {
+  set(x, y, z, b);
+  worldEdits[idx(x,y,z)]=b;
+  var cx = Math.floor(x / CS), cz = Math.floor(z / CS);
+  rebuild(cx, cz);
+  if (x % CS === 0) rebuild(cx - 1, cz);
+  if (x % CS === CS - 1) rebuild(cx + 1, cz);
+  if (z % CS === 0) rebuild(cx, cz - 1);
+  if (z % CS === CS - 1) rebuild(cx, cz + 1);
+}
+
+// ---------- Player ----------
+var P = { x: W / 2 + 0.5, y: 0, z: D / 2 + 0.5, vy: 0, yaw: 0, pitch: 0, ground: false };
+var keys = {};
+
+function hits(px, py, pz) {
+  var x0 = Math.floor(px - 0.3), x1 = Math.floor(px + 0.3);
+  var y0 = Math.floor(py), y1 = Math.floor(py + 1.79);
+  var z0 = Math.floor(pz - 0.3), z1 = Math.floor(pz + 0.3);
+  for (var y = y0; y <= y1; y++) for (var z = z0; z <= z1; z++) for (var x = x0; x <= x1; x++)
+    if (solid(x, y, z)) return true;
+  return false;
+}
+function move(axis, d) {
+  var n = Math.ceil(Math.abs(d) / 0.2);
+  if (n === 0) return;
+  var s = d / n;
+  for (var i = 0; i < n; i++) {
+    if (axis === 0) P.x += s; else if (axis === 1) P.y += s; else P.z += s;
+    if (hits(P.x, P.y, P.z)) {
+      if (axis === 0) P.x -= s; else if (axis === 1) P.y -= s; else P.z -= s;
+      if (axis === 1) { if (d < 0) P.ground = true; P.vy = 0; }
+      return;
+    }
+  }
+}
+
+// ---------- Inventory, recipes, mining and food ----------
+var ITEM_NAMES={raw_meat:"Raw meat",rotten_flesh:"Rotten flesh",leather:"Leather",cooked_meat:"Cooked meat",feather:"Feather",wool:"Wool",stick:"Stick",wooden_pickaxe:"Wooden pickaxe",stone_pickaxe:"Stone pickaxe",iron_pickaxe:"Iron pickaxe",wooden_axe:"Wooden axe",wooden_sword:"Wooden sword",stone_sword:"Stone sword",iron_sword:"Iron sword",coal:"Coal",iron_ore:"Iron ore",iron_ingot:"Iron ingot",leather_helmet:"Leather helmet",leather_chestplate:"Leather chestplate",leather_leggings:"Leather leggings",leather_boots:"Leather boots",iron_helmet:"Iron helmet",iron_chestplate:"Iron chestplate",iron_leggings:"Iron leggings",iron_boots:"Iron boots",bow:"Bow",arrow:"Arrow",seeds:"Seeds",wheat:"Wheat",bread:"Bread",bed:"Bed"}; 
+var armor={helmet:"",chestplate:"",leggings:"",boots:""};
+var armorValue=0, cropClock=0, plantedCrops={};
+var furnaceFuel=0, furnaceJob=null, furnaceProgress=0;
+var RECIPES=[
+ {name:"Oak planks x4",out:{5:4},need:{18:1}},
+ {name:"Sticks x4",out:{stick:4},need:{5:2}},
+ {name:"Wooden pickaxe",out:{wooden_pickaxe:1},need:{5:3,stick:2},station:"table"},
+ {name:"Stone pickaxe",out:{stone_pickaxe:1},need:{3:3,stick:2},station:"table"},
+ {name:"Wooden axe",out:{wooden_axe:1},need:{5:3,stick:2},station:"table"},
+ {name:"Wooden sword",out:{wooden_sword:1},need:{5:2,stick:1},station:"table"},
+ {name:"Furnace",out:{19:1},need:{3:8}},
+ {name:"Crafting table",out:{20:1},need:{5:4}},
+ {name:"Chest",out:{21:1},need:{5:8}},
+ {name:"Leather helmet",out:{leather_helmet:1},need:{leather:5}},
+ {name:"Leather chestplate",out:{leather_chestplate:1},need:{leather:8}},
+ {name:"Leather leggings",out:{leather_leggings:1},need:{leather:7}},
+ {name:"Leather boots",out:{leather_boots:1},need:{leather:4}},
+ {name:"Iron helmet",out:{iron_helmet:1},need:{iron_ingot:5},station:"table"},
+ {name:"Iron chestplate",out:{iron_chestplate:1},need:{iron_ingot:8},station:"table"},
+ {name:"Iron leggings",out:{iron_leggings:1},need:{iron_ingot:7},station:"table"},
+ {name:"Iron boots",out:{iron_boots:1},need:{iron_ingot:4},station:"table"},
+ {name:"Iron pickaxe",out:{iron_pickaxe:1},need:{iron_ingot:3,stick:2},station:"table"},
+ {name:"Stone sword",out:{stone_sword:1},need:{3:2,stick:1}},
+ {name:"Iron sword",out:{iron_sword:1},need:{iron_ingot:2,stick:1},station:"table"},
+ {name:"Bow",out:{bow:1},need:{stick:3,feather:1}},
+ {name:"Arrows x4",out:{arrow:4},need:{stick:1,feather:1,coal:1}},
+ {name:"Bread",out:{bread:1},need:{wheat:3}},
+ {name:"Bed",out:{23:1},need:{5:3,wool:3},station:"table"}
+];
+function itemName(k){return ITEM_NAMES[k]||BLOCK_NAMES[Number(k)-1]||String(k);}
+function countItem(k){return Number(inventory[k]||0);}
+function hasNearbyBlock(id,radius){
+ var px=Math.floor(P.x),py=Math.floor(P.y),pz=Math.floor(P.z);
+ for(var x=px-radius;x<=px+radius;x++)for(var y=py-2;y<=py+2;y++)for(var z=pz-radius;z<=pz+radius;z++)
+  if(get(x,y,z)===id)return true;
+ return false;
+}
+function hasRecipe(r){
+ if(worldMode==="creative")return true;
+ if(r.station==="furnace"&&!hasNearbyBlock(19,4))return false;
+ if(r.station==="table"&&!hasNearbyBlock(20,4))return false;
+ return Object.keys(r.need).every(function(k){return countItem(k)>=r.need[k];});
+}
+function addItem(k,n){var used=Object.keys(inventory).filter(function(q){return countItem(q)>0;}).length;if(!inventory[k]&&used>=28){toast("Inventory full! Make room in your 28 total slots.");return false;}inventory[k]=(inventory[k]||0)+n;updateInventoryUI();drawHotbar();return true;}
+function craftRecipe(i){
+ var r=RECIPES[i];if(!r||!hasRecipe(r)){toast("Not enough materials!");return;}
+ if(worldMode!=="creative")Object.keys(r.need).forEach(function(k){inventory[k]-=r.need[k];});
+ Object.keys(r.out).forEach(function(k){inventory[k]=(inventory[k]||0)+r.out[k];});
+ Object.keys(r.out).forEach(function(k){
+   if(/^(leather|iron)_(helmet|chestplate|leggings|boots)$/.test(k)){
+     var m=/^(?:leather|iron)_(helmet|chestplate|leggings|boots)$/.exec(k);
+     armor[m[1]]=k;recalculateArmor();
+   }
+ });
+ toast("Crafted "+r.name);updateInventoryUI();drawHotbar();saveWorld(false);
+}
+function recalculateArmor(){
+ armorValue=Object.keys(armor).reduce(function(n,k){return n+(armor[k]?(armor[k].indexOf("iron_")===0?2:1):0);},0);
+}
+
+function plantSeeds(){
+ if(countItem("seeds")<=0){toast("You need seeds.");return;}
+ var h=ray();if(!h||!(get(h.x,h.y,h.z)===1||get(h.x,h.y,h.z)===2)){toast("Look at grass or dirt to plant.");return;}
+ var y=h.y+1;if(get(h.x,y,h.z)!==0){toast("There is no room to plant here.");return;}
+ edit(h.x,y,h.z,22);inventory.seeds--;plantedCrops[idx(h.x,y,h.z)]=0;toast("Seeds planted.");updateInventoryUI();saveWorld(false);
+}
+function eatItem(k){
+ if(k!=="raw_meat"&&k!=="cooked_meat"&&k!=="bread")return;
+ if(worldMode==="survival"){
+  if(countItem(k)<=0)return;
+  inventory[k]--;hunger=Math.min(20,hunger+(k==="bread"?5:(k==="cooked_meat"?7:3)));
+  if(k==="cooked_meat")health=Math.min(20,health+2);
+  toast(k==="cooked_meat"?"You ate cooked meat.":"You ate raw meat.");
+  updateHUD();updateInventoryUI();saveWorld(false);
+ }
+}
+function slotColor(k){var id=Number(k);if(id>=1&&id<=23&&COL[id])return "rgb("+COL[id][1].join(",")+")";var p={coal:"#242424",iron_ore:"#99958f",iron_ingot:"#d6d1c7",raw_meat:"#a94b43",cooked_meat:"#9b6036",stick:"#9b6b3d",wooden_pickaxe:"#9b6b3d",stone_pickaxe:"#858585",iron_pickaxe:"#c5c5c5",seeds:"#82a83c",wheat:"#d7b84c",bread:"#b88743",wool:"#e8e4d8",leather:"#87502e",arrow:"#c8c2ae",feather:"#e7e0d0",bow:"#8b552e"};return p[k]||"#b4a58a";}
+function makeSlot(k,interactive){var d=document.createElement("div");d.className="mc-slot"+(k==null?" empty":"");if(k!=null&&countItem(k)>0){var icon=document.createElement("div");icon.className="item-icon";icon.style.background=slotColor(k);d.appendChild(icon);var qty=document.createElement("span");qty.className="item-count";qty.textContent=countItem(k)>1?countItem(k):"";d.appendChild(qty);d.title=itemName(k)+" ×"+countItem(k);if(interactive)d.onclick=function(){if(k==="seeds")plantSeeds();else if(k==="raw_meat"||k==="cooked_meat"||k==="bread")eatItem(k);};}else d.title="Empty slot";return d;}
+function updateInventoryUI(){var grid=document.getElementById("inventoryGrid"),hot=document.getElementById("inventoryHotbar"),recipes=document.getElementById("recipeGrid"),ag=document.getElementById("armorGrid");if(!grid||!recipes)return;grid.innerHTML="";if(hot)hot.innerHTML="";if(ag){ag.innerHTML="";["helmet","chestplate","leggings","boots"].forEach(function(slot){var d=document.createElement("div");d.className="invItem";d.textContent=slot+": "+(armor[slot]?itemName(armor[slot]):"Empty");ag.appendChild(d);});}
+var hs=Math.max(0,Math.min(sel-3,HOT.length-8)),activeHot=HOT.slice(hs,hs+8);var keys=Object.keys(inventory).filter(function(k){return countItem(k)>0&&!activeHot.includes(Number(k));}).sort(function(a,b){return itemName(a).localeCompare(itemName(b));}).slice(0,20);for(var i=0;i<20;i++)grid.appendChild(makeSlot(keys[i]||null,true));for(var j=0;j<8;j++){var b=HOT[hs+j],have=worldMode==="creative"||countItem(b)>0,slot=makeSlot(have?String(b):null,false);if(hs+j===sel)slot.classList.add("selected");if(hot)hot.appendChild(slot);}
+var furnaceNear=hasNearbyBlock(19,4),bedNear=hasNearbyBlock(23,3);document.getElementById("furnaceStatus").textContent=furnaceNear?("Fuel: "+Math.ceil(furnaceFuel)+"s · "+(furnaceJob?"Smelting/cooking: "+furnaceProgress.toFixed(1)+"/5s":"Ready to smelt iron ore or cook raw meat.")):"Place a furnace nearby to smelt ore and cook food.";["addFuel","smeltIron","cookMeat"].forEach(function(id){document.getElementById(id).disabled=!furnaceNear;});document.getElementById("bedStatus").textContent=bedNear?"A bed is nearby. You can sleep when it is night.":"Place a bed nearby to sleep until morning.";document.getElementById("sleepButton").disabled=!bedNear||!(gameTime>.55||gameTime<.20);recipes.innerHTML="";RECIPES.forEach(function(r,i){var d=document.createElement("div");d.className="recipe";var info=document.createElement("span");info.innerHTML="<b>"+r.name+"</b><br><small>"+Object.keys(r.need).map(function(k){return itemName(k)+" ×"+r.need[k];}).join(", ")+(r.station?"<br>Requires nearby "+(r.station==="furnace"?"furnace":"crafting table"):"")+"</small>";var btn=document.createElement("button");btn.textContent="Craft";btn.disabled=!hasRecipe(r);btn.onclick=function(){craftRecipe(i);};d.appendChild(info);d.appendChild(btn);recipes.appendChild(d);});}
+function openInventory(){
+ if(document.pointerLockElement===canvas)document.exitPointerLock();
+ document.getElementById("inventoryPanel").style.display="block";updateInventoryUI();
+}
+function closeInventory(){document.getElementById("inventoryPanel").style.display="none";}
+document.getElementById("inventoryClose").onclick=closeInventory;
+document.getElementById("addFuel").onclick=function(){if(!hasNearbyBlock(19,4)){toast("No furnace nearby.");return;}if(countItem("coal")<1){toast("You need coal.");return;}inventory.coal--;furnaceFuel+=20;toast("Added coal: 20 seconds of fuel.");updateInventoryUI();saveWorld(false);};
+document.getElementById("smeltIron").onclick=function(){if(!hasNearbyBlock(19,4)||furnaceJob){toast("Furnace is busy or too far away.");return;}if(countItem("iron_ore")<1){toast("You need iron ore.");return;}if(furnaceFuel<=0){toast("Add coal fuel first.");return;}inventory.iron_ore--;furnaceJob="iron";furnaceProgress=0;updateInventoryUI();saveWorld(false);};
+document.getElementById("cookMeat").onclick=function(){if(!hasNearbyBlock(19,4)||furnaceJob){toast("Furnace is busy or too far away.");return;}if(countItem("raw_meat")<1){toast("You need raw meat.");return;}if(furnaceFuel<=0){toast("Add coal fuel first.");return;}inventory.raw_meat--;furnaceJob="meat";furnaceProgress=0;updateInventoryUI();saveWorld(false);};
+document.getElementById("sleepButton").onclick=function(){if(!hasNearbyBlock(23,3)){toast("No bed nearby.");return;}if(!(gameTime>.55||gameTime<.20)){toast("You can only sleep at night.");return;}gameTime=.25;hostileSpawnClock=0;toast("Good morning!");updateHUD();updateInventoryUI();saveWorld(false);};
+document.getElementById("inventoryPanel").addEventListener("click",function(e){e.stopPropagation();});
+function aimedAnimal(){
+ var ranged=countItem("bow")>0&&countItem("arrow")>0;
+ var dx=-Math.sin(P.yaw)*Math.cos(P.pitch),dy=Math.sin(P.pitch),dz=-Math.cos(P.yaw)*Math.cos(P.pitch),best=null,bestScore=.16;
+ mobs.forEach(function(m){if(m.dead)return;var vx=m.x-P.x,vy=(m.y+.65)-(P.y+1.62),vz=m.z-P.z,dist=Math.sqrt(vx*vx+vy*vy+vz*vz);if(dist>(ranged?24:4.2))return;var dot=(vx*dx+vy*dy+vz*dz)/dist;if(dot>bestScore){bestScore=dot;best=m;}});
+ return best;
+}
+function hitAnimal(m){
+ if(!m)return;
+ var ranged=countItem("bow")>0&&countItem("arrow")>0;
+ if(ranged)inventory.arrow--;
+ var damage=ranged?4:(countItem("iron_sword")>0?5:(countItem("stone_sword")>0?3:(countItem("wooden_sword")>0?2:1)));
+ m.hp=(m.hp||3)-damage;
+ if(m.hp<=0){
+  m.dead=true;
+  if(m.type===0){addItem("raw_meat",2);addItem("leather",1);}
+  else if(m.type===1){addItem("raw_meat",1);}
+  else if(m.type===2){addItem("wool",2);}
+  else if(m.type===3){addItem("raw_meat",1);addItem("feather",2);}
+  else if(m.type===4){toast("The villager ran away!");}
+  else {addItem("rotten_flesh",1);if(m.type===6)addItem("arrow",1);}
+  mobs=mobs.filter(function(a){return !a.dead;});
+  toast("Animal hunted! Items collected.");updateHUD();
+ }else toast("Animal hit ("+m.hp+" health left)");
+ saveWorld(false);
+}
+
+function update(dt) {
+  updateMining(dt);updateDrops(dt);
+  var sp = (keys.ShiftLeft || keys.ShiftRight) ? 7 : 4.5;
+  var fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
+  var rx = Math.cos(P.yaw), rz = -Math.sin(P.yaw);
+  var mx = 0, mz = 0;
+  if (keys.KeyW) { mx += fx; mz += fz; }
+  if (keys.KeyS) { mx -= fx; mz -= fz; }
+  if (keys.KeyD) { mx += rx; mz += rz; }
+  if (keys.KeyA) { mx -= rx; mz -= rz; }
+  var l = Math.sqrt(mx * mx + mz * mz);
+  if (l > 0) { mx = mx / l * sp; mz = mz / l * sp; }
+  P.vy -= 28 * dt;
+  if (P.vy < -40) P.vy = -40;
+  if (keys.Space && P.ground) P.vy = 9;
+  P.ground = false;
+  move(0, mx * dt);
+  move(2, mz * dt);
+  move(1, P.vy * dt);
+  gameTime=(gameTime+dt/360)%1;dayPhase=gameTime;
+  if(furnaceJob){furnaceProgress+=dt;if(furnaceProgress>=5){if(furnaceJob==="iron")addItem("iron_ingot",1);else addItem("cooked_meat",1);furnaceFuel=Math.max(0,furnaceFuel-5);toast(furnaceJob==="iron"?"Iron ingot smelted!":"Food cooked!");furnaceJob=null;furnaceProgress=0;updateInventoryUI();saveWorld(false);}}
+  cropClock+=dt;
+  if(cropClock>=30){cropClock=0;Object.keys(plantedCrops).forEach(function(k){plantedCrops[k]++;if(plantedCrops[k]>=3){var n=Number(k),x=n%W,z=Math.floor(n/W)%D,y=Math.floor(n/(W*D));if(get(x,y,z)===22){edit(x,y,z,0);addItem("wheat",2);addItem("seeds",1);}delete plantedCrops[k];}});}
+  saveClock += dt;
+  if (saveClock > 30) { saveClock = 0; saveWorld(false); }
+  ensureVisibleChunks(false);
+  if (worldMode === "survival") {
+    hostileSpawnClock+=dt;
+    if((gameTime>.55||gameTime<.20)&&hostileSpawnClock>12&&mobs.filter(function(m){return m.type>=5;}).length<16){
+      var sx=Math.max(3,Math.min(W-4,Math.floor(P.x)+(Math.random()-.5)*34));
+      var sz=Math.max(3,Math.min(D-4,Math.floor(P.z)+(Math.random()-.5)*34));
+      var sy=topY(sx,sz);
+      if(sy>0)mobs.push({x:sx+.5,y:sy+1,z:sz+.5,phase:0,type:5+Math.floor(Math.random()*3),hp:5,dir:0,turn:0});
+      hostileSpawnClock=0;
+    }
+    damageClock = Math.max(0, damageClock-dt);
+    if (hunger > 0) { hungerClock += dt; if(hungerClock>=22){hunger=Math.max(0,hunger-1);hungerClock=0;updateHUD();} }
+    if (hunger === 0 && damageClock === 0) { health=Math.max(0,health-1); damageClock=2.5; }
+    if (hunger > 15 && health < 20 && Math.random() < dt*.25) health++;
+    if (health <= 0) { health=20; hunger=15; var respY=topY(Math.floor(W/2),Math.floor(D/2));P.x=W/2+.5;P.z=D/2+.5;P.y=respY+1.1;P.vy=0;toast("You respawned!"); }
+    for (var mi=0; mi<mobs.length; mi++) {
+      var mob=mobs[mi], dx=P.x-mob.x, dz=P.z-mob.z, dist=Math.sqrt(dx*dx+dz*dz);
+      mob.phase += dt*3;
+      if(mob.type===5||mob.type===6||mob.type===7){
+        var night=(gameTime>.55||gameTime<.20);
+        if(night&&dist<22&&dist>.8){
+          var speedHostile=mob.type===7?1.35:1.05;
+          var hx=mob.x+dx/dist*speedHostile*dt,hz=mob.z+dz/dist*speedHostile*dt;
+          if(!solid(Math.floor(hx),Math.floor(mob.y),Math.floor(hz))){mob.x=hx;mob.z=hz;}
+        }
+        if(night&&dist<1.45&&damageClock===0){health=Math.max(0,health-Math.max(1,3-Math.floor(armorValue/2)));damageClock=1.1;updateHUD();}
+        continue;
+      }
+      mob.turn=(mob.turn||0)-dt;
+      if(mob.turn<=0){mob.dir=(Math.random()-.5)*Math.PI*2;mob.turn=2+Math.random()*4;}
+      var speed=mob.type===3?.55:.35;
+      var nx=mob.x+Math.cos(mob.dir||0)*speed*dt,nz=mob.z+Math.sin(mob.dir||0)*speed*dt;
+      if(!solid(Math.floor(nx),Math.floor(mob.y),Math.floor(nz))){mob.x=nx;mob.z=nz;}
+      mob.y=topY(Math.max(0,Math.min(W-1,Math.floor(mob.x))),Math.max(0,Math.min(D-1,Math.floor(mob.z))))+1;
+    }
+  }
+}
+
+// ---------- Block picking ----------
+function ray() {
+  var dx = -Math.sin(P.yaw) * Math.cos(P.pitch);
+  var dy = Math.sin(P.pitch);
+  var dz = -Math.cos(P.yaw) * Math.cos(P.pitch);
+  var ex = P.x, ey = P.y + 1.62, ez = P.z;
+  var lx = Math.floor(ex), ly = Math.floor(ey), lz = Math.floor(ez);
+  for (var t = 0; t < 6; t += 0.04) {
+    var x = Math.floor(ex + dx * t), y = Math.floor(ey + dy * t), z = Math.floor(ez + dz * t);
+    if (x >= 0 && z >= 0 && x < W && z < D && y >= 0 && y < H && world[idx(x, y, z)])
+      return { x: x, y: y, z: z, px: lx, py: ly, pz: lz };
+    lx = x; ly = y; lz = z;
+  }
+  return null;
+}
+function overlapsPlayer(x, y, z) {
+  return x + 1 > P.x - 0.3 && x < P.x + 0.3 && y + 1 > P.y && y < P.y + 1.8 && z + 1 > P.z - 0.3 && z < P.z + 0.3;
+}
+
+// Survival mining: blocks take time, the matching tool speeds them up, and drops stay in the world.
+function blockTool(b){if([4,5,6,18].includes(b))return "axe";if([3,7,11,13,14,16,17,19,20,21].includes(b))return "pickaxe";if([1,2,8,9,15].includes(b))return "shovel";return "hand";}
+function hasTool(t){return Object.keys(inventory).some(function(k){return countItem(k)>0&&(t==="pickaxe"?k.includes("pickaxe"):t==="axe"?k.includes("_axe"):k.includes("shovel"));});}
+function mineTime(b){var base=({1:.55,2:.65,3:2.1,4:1.4,5:1,6:.8,7:1.2,8:.45,9:.3,10:.5,11:1,12:1,13:1.6,14:1,15:.7,16:2.8,17:3.2,18:1.5,19:2,20:1.8,21:1.5,22:.25,23:1})[b]||1;if(worldMode!=="survival")return 0;var t=blockTool(b);if(t==="hand")return base;if(!hasTool(t))return base*3.8;return base*((countItem("iron_pickaxe")||countItem("iron_axe"))?0.22:((countItem("stone_pickaxe")||countItem("stone_axe"))?0.38:0.58));}
+function dropType(b){if(b===16)return "coal";if(b===17)return "iron_ore";if(b===4||b===18)return "18";return String(b);}
+function spawnDrop(k,x,y,z,n){groundDrops.push({item:String(k),count:n||1,x:x+.5,y:y+.25,z:z+.5,vy:2,age:0});}
+function breakTarget(h){var b=get(h.x,h.y,h.z);if(!b)return;if(worldMode!=="creative"&&b===22){spawnDrop("wheat",h.x,h.y,h.z,2);spawnDrop("seeds",h.x,h.y,h.z,1);}else if(worldMode!=="creative")spawnDrop(dropType(b),h.x,h.y,h.z,1);edit(h.x,h.y,h.z,0);miningTarget=null;miningProgress=0;updateHUD();}
+function updateMining(dt){if(!keys.Mouse0){miningTarget=null;miningProgress=0;return;}var h=ray();if(!h){miningTarget=null;miningProgress=0;return;}var key=h.x+","+h.y+","+h.z;if(!miningTarget||miningTarget.key!==key){miningTarget={key:key};miningProgress=0;}if(worldMode==="creative"){breakTarget(h);return;}miningProgress+=dt/Math.max(.08,mineTime(get(h.x,h.y,h.z)));if(miningProgress>=1)breakTarget(h);}
+function updateDrops(dt){for(var i=groundDrops.length-1;i>=0;i--){var d=groundDrops[i];d.age+=dt;d.vy-=9*dt;var ny=d.y+d.vy*dt,bx=Math.floor(d.x),bz=Math.floor(d.z),by=Math.floor(ny-.12);if(solid(bx,by,bz)){d.vy=0;d.y=Math.floor(d.y)+.14;}else d.y=Math.max(.15,ny);var dx=P.x-d.x,dy=P.y+.8-d.y,dz=P.z-d.z;if(dx*dx+dy*dy+dz*dz<1.8&&addItem(d.item,d.count))groundDrops.splice(i,1);}}
+
+// ---------- Input ----------
+var startEl = document.getElementById("start");
+startEl.addEventListener("click", function () { canvas.requestPointerLock(); });
+document.addEventListener("pointerlockchange", function () {
+  startEl.style.display = document.pointerLockElement === canvas ? "none" : "flex";
+  if (document.pointerLockElement !== canvas) { keys = {}; saveWorld(false); }
+});
+document.addEventListener("mousemove", function (e) {
+  if (document.pointerLockElement !== canvas) return;
+  P.yaw -= e.movementX * 0.0022;
+  P.pitch -= e.movementY * 0.0022;
+  if (P.pitch > 1.55) P.pitch = 1.55;
+  if (P.pitch < -1.55) P.pitch = -1.55;
+});
+document.addEventListener("keydown", function (e) {
+  keys[e.code] = true;
+  if (e.code === "Space") e.preventDefault();
+  var m = /^Digit([1-8])$/.exec(e.code);
+  if (m) { var hs=Math.max(0,Math.min(sel-3,HOT.length-8));sel=Math.min(HOT.length-1,hs+parseInt(m[1],10)-1);drawHotbar();updateInventoryUI(); }
+});
+document.addEventListener("keyup", function (e) { keys[e.code] = false; });
+window.addEventListener("blur", function () { keys = {};miningTarget=null;miningProgress=0; });
+document.addEventListener("wheel", function (e) {
+  sel = (sel + (e.deltaY > 0 ? 1 : -1) + HOT.length) % HOT.length;
+  drawHotbar();updateInventoryUI();
+});
+canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+document.addEventListener("mouseup",function(e){if(e.button===0){keys.Mouse0=false;miningTarget=null;miningProgress=0;}});
+canvas.addEventListener("mousedown", function (e) {
+  if (document.pointerLockElement !== canvas) return;
+  var h = ray();
+  if (e.button === 0) {var animal=aimedAnimal();if(animal){hitAnimal(animal);return;}keys.Mouse0=true;miningTarget=null;miningProgress=0;return;}
+  if (!h) return;
+  if (e.button === 2 && !overlapsPlayer(h.px, h.py, h.pz)) {
+    var chosen=HOT[sel];
+    if (worldMode!=="survival" || (inventory[chosen]||0)>0) {
+      edit(h.px,h.py,h.pz,chosen);
+      if (worldMode==="survival") inventory[chosen]--;
+      updateHUD();updateInventoryUI();
+    } else toast("You need to collect " + BLOCK_NAMES[chosen-1] + " first!");
+  }
+});
+
+
+// ---------- Multiple worlds, saving and survival HUD ----------
+var menu=document.getElementById("menu"), worldList=document.getElementById("worldList");
+var toastEl=document.getElementById("toast"), toastTimer=0;
+function toast(msg){toastEl.textContent=msg;toastEl.style.display="block";clearTimeout(toastTimer);toastTimer=setTimeout(function(){toastEl.style.display="none";},2200);}
+function encodeWorld(arr){
+  var parts=[], step=0x6000;
+  for(var i=0;i<arr.length;i+=step) parts.push(String.fromCharCode.apply(null,arr.subarray(i,Math.min(i+step,arr.length))));
+  return btoa(parts.join(""));
+}
+function decodeWorld(str){
+  var raw=atob(str), out=new Uint8Array(raw.length);
+  for(var i=0;i<raw.length;i++) out[i]=raw.charCodeAt(i);
+  return out;
+}
+function getWorlds(){try{return JSON.parse(localStorage.getItem("blockcraft_worlds_v3")||"{}");}catch(e){return {};}}
+function putWorlds(data){try{localStorage.setItem("blockcraft_worlds_v3",JSON.stringify(data));return true;}catch(e){toast("Storage is full. Export or delete a world.");return false;}}
+function saveWorld(show){
+  if(!currentWorldId) return;
+  var all=getWorlds();
+  all[currentWorldId]={id:currentWorldId,name:worldName,mode:worldMode,seed:worldSeed,edits:worldEdits,player:{x:P.x,y:P.y,z:P.z,yaw:P.yaw,pitch:P.pitch},health:health,hunger:hunger,hungerClock:hungerClock,inventory:inventory,armor:armor,mobs:mobs,gameTime:gameTime,plantedCrops:plantedCrops,groundDrops:groundDrops,furnaceFuel:furnaceFuel,furnaceJob:furnaceJob,furnaceProgress:furnaceProgress,updated:Date.now()};
+  var ok=putWorlds(all); if(show&&ok) toast("World saved!");
+}
+function refreshWorldList(){
+  var all=getWorlds(); worldList.innerHTML="";
+  var ids=Object.keys(all).sort(function(a,b){return (all[b].updated||0)-(all[a].updated||0);});
+  if(!ids.length){worldList.innerHTML="<p>No saved worlds yet.</p>";return;}
+  ids.forEach(function(id){
+    var w=all[id], row=document.createElement("div"); row.className="worldRow";
+    var label=document.createElement("div"); label.innerHTML="<strong></strong><small></small>";
+    label.firstChild.textContent=w.name; label.lastChild.textContent=(w.mode==="survival"?"Survival":"Creative")+" · "+new Date(w.updated||Date.now()).toLocaleString();
+    var actions=document.createElement("div"), load=document.createElement("button"), del=document.createElement("button"), exp=document.createElement("button");
+    load.textContent="Load"; load.onclick=function(){loadWorld(id);};
+    del.textContent="Delete"; del.onclick=function(){if(confirm("Delete "+w.name+"?")){var a=getWorlds();delete a[id];putWorlds(a);refreshWorldList();}};
+    exp.textContent="Export"; exp.onclick=function(){var blob=new Blob([JSON.stringify(w)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=(w.name||"world").replace(/[^a-z0-9_-]/gi,"_")+".blockcraft.json";a.click();URL.revokeObjectURL(url);};
+    actions.appendChild(load);actions.appendChild(exp);actions.appendChild(del);row.appendChild(label);row.appendChild(actions);worldList.appendChild(row);
+  });
+}
+function resetWorld(name,mode){
+  world.fill(0);worldEdits={};worldSeed=Math.floor(Math.random()*2147483000)+1;gameTime=.32;hostileSpawnClock=0;plantedCrops={};groundDrops=[];miningTarget=null;miningProgress=0;furnaceFuel=0;furnaceJob=null;furnaceProgress=0;
+  worldName=name||"My World";worldMode=mode;currentWorldId="world_"+Date.now()+"_"+Math.floor(Math.random()*9999);
+  P.x=W/2+.5;P.z=D/2+.5;P.y=10;P.vy=0;P.yaw=0;P.pitch=0;health=20;hunger=20;
+  inventory={};armor={helmet:"",chestplate:"",leggings:"",boots:""};armorValue=0;
+  HOT.forEach(function(b){inventory[b]=mode==="creative"?999:0;});
+  if(mode==="creative"){Object.keys(ITEM_NAMES).forEach(function(k){inventory[k]=99;});armor={helmet:"iron_helmet",chestplate:"iron_chestplate",leggings:"iron_leggings",boots:"iron_boots"};recalculateArmor();}
+  mobs=[];generate();var sy=topY(Math.floor(P.x),Math.floor(P.z));P.y=sy+1.01;
+  for(var m=0;m<(mode==="survival"?24:12);m++){
+    var mx=8+Math.floor(Math.random()*(W-16)),mz=8+Math.floor(Math.random()*(D-16)),my=topY(mx,mz);
+    if(my>0)mobs.push({x:mx+.5,y:my+1,z:mz+.5,phase:Math.random()*6,type:m%4,hp:3,dir:Math.random()*6.28,turn:Math.random()*3});
+  }
+  chunks=[];builtChunks={};lastChunkX=-1;lastChunkZ=-1;ensureVisibleChunks(true);
+  menu.style.display="none";startEl.style.display="flex";drawHotbar();updateHUD();updateInventoryUI();saveWorld(false);
+}
+function loadWorld(id){
+  var w=getWorlds()[id];if(!w)return;
+  try{
+    world.fill(0);worldEdits={};worldSeed=w.seed||1;worldName=w.name;worldMode=w.mode||"creative";currentWorldId=id;
+    if(w.edits){generate();worldEdits=w.edits||{};Object.keys(worldEdits).forEach(function(k){var n=Number(k);if(n>=0&&n<world.length)world[n]=worldEdits[k];});}
+    else if(w.terrain){var data=decodeWorld(w.terrain);if(data.length!==world.length)throw new Error("This older world uses a different map size. Start a new world or import a compatible 500x500 world.");world.set(data);}
+    else throw new Error("Missing world terrain data");
+    var p=w.player||{};P.x=p.x||W/2;P.y=p.y||12;P.z=p.z||D/2;P.yaw=p.yaw||0;P.pitch=p.pitch||0;P.vy=0;
+    health=w.health==null?20:w.health;hunger=w.hunger==null?20:w.hunger;hungerClock=w.hungerClock||0;inventory=w.inventory||{};mobs=w.mobs||[];
+    armor=w.armor||{helmet:"",chestplate:"",leggings:"",boots:""};recalculateArmor();gameTime=w.gameTime||.32;plantedCrops=w.plantedCrops||{};groundDrops=w.groundDrops||[];furnaceFuel=w.furnaceFuel||0;furnaceJob=w.furnaceJob||null;furnaceProgress=w.furnaceProgress||0;
+    chunks=[];builtChunks={};lastChunkX=-1;lastChunkZ=-1;ensureVisibleChunks(true);
+    menu.style.display="none";startEl.style.display="flex";drawHotbar();updateHUD();updateInventoryUI();toast("Loaded "+worldName);
+  }catch(e){alert("Could not load this world: "+e.message);}
+}
+function updateHUD(){
+  document.getElementById("survival").textContent=worldMode==="survival"?
+    (gameTime>.55||gameTime<.20?"🌙 NIGHT":"☀ DAY")+" · ♥ "+health+"/20   🍗 "+hunger+"/20   🛡 "+armorValue+"   Mobs "+mobs.length:
+    "CREATIVE · "+worldName;
+}
+document.getElementById("worldsButton").onclick=function(e){e.stopPropagation();if(document.pointerLockElement===canvas)document.exitPointerLock();menu.style.display="flex";refreshWorldList();};
+document.getElementById("importWorld").onclick=function(){document.getElementById("importFile").click();};
+document.getElementById("importFile").onchange=function(e){var file=e.target.files[0];if(!file)return;var reader=new FileReader();reader.onload=function(){try{var w=JSON.parse(reader.result);if(!w.terrain||!w.name)throw new Error("This file is not a Blockcraft world");var id="import_"+Date.now();w.id=id;w.updated=Date.now();var all=getWorlds();all[id]=w;if(putWorlds(all)){refreshWorldList();toast("World imported!");}}catch(err){alert("Could not import world: "+err.message);}e.target.value="";};reader.readAsText(file);};
+document.getElementById("createCreative").onclick=function(){resetWorld(document.getElementById("worldName").value.trim()||"My World","creative");};
+document.getElementById("createSurvival").onclick=function(){resetWorld(document.getElementById("worldName").value.trim()||"My World","survival");};
+window.addEventListener("beforeunload",function(){saveWorld(false);});
+window.addEventListener("storage",refreshWorldList);
+document.addEventListener("keydown",function(e){
+  if(e.code==="Escape"&&document.pointerLockElement!==canvas){menu.style.display="flex";refreshWorldList();}
+  if(e.code==="KeyE"&&document.pointerLockElement===canvas){e.preventDefault();openInventory();}
+  else if(e.code==="KeyE"&&document.getElementById("inventoryPanel").style.display==="block"){closeInventory();canvas.requestPointerLock();}
+});
+
+// ---------- HUD ----------
+var hotbar = document.getElementById("hotbar");
+var info = document.getElementById("info");
+function drawHotbar() {
+  hotbar.innerHTML = "";
+  var start=Math.max(0,Math.min(sel-3,HOT.length-8));
+  for (var j=0;j<8;j++) {
+    var i=start+j,b=HOT[i],d=document.createElement("div");
+    if(b==null){d.className="slot empty";hotbar.appendChild(d);continue;}
+    var c=COL[b][1],have=worldMode==="creative"||countItem(b)>0;
+    d.className="slot"+(i===sel?" sel":"")+(!have?" empty":"");
+    d.style.background=have?"linear-gradient(135deg,rgba(255,255,255,.22),transparent 45%),rgb("+c[0]+","+c[1]+","+c[2]+")":"#333";
+    d.title=have?BLOCK_NAMES[b-1]+(worldMode==="survival"?" ("+(inventory[b]||0)+")":""):"Empty slot";
+    d.innerHTML="<span>"+String(j+1)+"</span>"+(worldMode==="survival"&&inventory[b]>0?"<span class=\"slot-count\">"+inventory[b]+"</span>":"");
+    d.style.color="#fff";d.style.fontSize="11px";d.style.textShadow="1px 1px 2px #000";
+    hotbar.appendChild(d);
+  }
+}
+
+
+// Simple low-poly block creatures, drawn in the same world-space mesh as terrain.
+var mobBuffer=gl.createBuffer();
+function cubeVerts(out,x,y,z,sx,sy,sz,color){
+  var faces=[
+    [[1,0,0],[[1,0,0],[1,1,0],[1,1,1],[1,0,1]]],
+    [[-1,0,0],[[0,0,1],[0,1,1],[0,1,0],[0,0,0]]],
+    [[0,1,0],[[0,1,1],[1,1,1],[1,1,0],[0,1,0]]],
+    [[0,-1,0],[[0,0,0],[1,0,0],[1,0,1],[0,0,1]]],
+    [[0,0,1],[[1,0,1],[1,1,1],[0,1,1],[0,0,1]]],
+    [[0,0,-1],[[0,0,0],[0,1,0],[1,1,0],[1,0,0]]]
+  ];
+  for(var f=0;f<6;f++){var shade=[.75,.75,1,.55,.7,.7][f];for(var j=0;j<6;j++){var q=faces[f][1][ORDER[j]];out.push(x+q[0]*sx,y+q[1]*sy,z+q[2]*sz,color[0]*shade,color[1]*shade,color[2]*shade);}}
+}
+function drawMobs(){
+  var out=[];
+  for(var i=0;i<mobs.length;i++){
+    var m=mobs[i], bob=Math.sin(m.phase)*.035;
+    if(m.type===4){ // villager
+      cubeVerts(out,m.x-.22,m.y+.18+bob,m.z-.18,.44,.72,.36,[.55,.34,.22]);
+      cubeVerts(out,m.x-.2,m.y+.9+bob,m.z-.16,.4,.42,.34,[.68,.48,.32]);
+      cubeVerts(out,m.x-.22,m.y+.96+bob,m.z+.12,.44,.12,.08,[.3,.18,.12]);
+      cubeVerts(out,m.x-.12,m.y-.18,m.z-.1,.14,.38,.14,[.25,.28,.48]);
+      cubeVerts(out,m.x+.08,m.y-.18,m.z-.1,.14,.38,.14,[.25,.28,.48]);
+    }else if(m.type>=5){ // night creatures
+      var hc=m.type===5?[.25,.62,.28]:(m.type===6?[.68,.68,.72]:[.25,.72,.3]);
+      cubeVerts(out,m.x-.27,m.y+.12+bob,m.z-.18,.54,.82,.36,hc);
+      cubeVerts(out,m.x-.25,m.y+.94+bob,m.z-.16,.5,.48,.34,hc);
+      cubeVerts(out,m.x-.22,m.y-.2,m.z-.1,.18,.38,.16,hc);
+      cubeVerts(out,m.x+.08,m.y-.2,m.z-.1,.18,.38,.16,hc);
+      cubeVerts(out,m.x-.18,m.y+1.08+bob,m.z+.17,.09,.07,.04,[.95,.08,.08]);
+      cubeVerts(out,m.x+.1,m.y+1.08+bob,m.z+.17,.09,.07,.04,[.95,.08,.08]);
+    }else if(m.type===0){ // cow
+      var brown=[.42,.25,.13],cream=[.88,.82,.68];
+      cubeVerts(out,m.x-.38,m.y+.28+bob,m.z-.25,.76,.62,.5,cream);
+      cubeVerts(out,m.x-.25,m.y+.48+bob,m.z+.19,.42,.38,.22,brown);
+      cubeVerts(out,m.x-.28,m.y-.12,m.z-.18,.14,.4,.14,brown);
+      cubeVerts(out,m.x+.14,m.y-.12,m.z-.18,.14,.4,.14,brown);
+      cubeVerts(out,m.x-.2,m.y-.12,m.z+.08,.14,.4,.14,brown);
+      cubeVerts(out,m.x+.2,m.y-.12,m.z+.08,.14,.4,.14,brown);
+    }else if(m.type===1){ // pig
+      var pink=[.9,.52,.58];
+      cubeVerts(out,m.x-.34,m.y+.22+bob,m.z-.22,.68,.55,.48,pink);
+      cubeVerts(out,m.x-.2,m.y+.4+bob,m.z+.18,.4,.34,.3,pink);
+      cubeVerts(out,m.x-.22,m.y-.12,m.z-.12,.13,.34,.13,pink);
+      cubeVerts(out,m.x+.14,m.y-.12,m.z-.12,.13,.34,.13,pink);
+      cubeVerts(out,m.x-.2,m.y-.12,m.z+.1,.13,.34,.13,pink);
+      cubeVerts(out,m.x+.14,m.y-.12,m.z+.1,.13,.34,.13,pink);
+    }else if(m.type===2){ // sheep
+      cubeVerts(out,m.x-.36,m.y+.25+bob,m.z-.24,.72,.58,.48,[.88,.87,.78]);
+      cubeVerts(out,m.x-.18,m.y+.42+bob,m.z+.17,.36,.36,.28,[.42,.34,.3]);
+      cubeVerts(out,m.x-.23,m.y-.12,m.z-.13,.13,.36,.13,[.42,.34,.3]);
+      cubeVerts(out,m.x+.13,m.y-.12,m.z-.13,.13,.36,.13,[.42,.34,.3]);
+      cubeVerts(out,m.x-.23,m.y-.12,m.z+.1,.13,.36,.13,[.42,.34,.3]);
+      cubeVerts(out,m.x+.13,m.y-.12,m.z+.1,.13,.36,.13,[.42,.34,.3]);
+    }else{ // chicken
+      cubeVerts(out,m.x-.18,m.y+.16+bob,m.z-.15,.36,.48,.3,[.94,.92,.83]);
+      cubeVerts(out,m.x-.12,m.y+.55+bob,m.z+.02,.24,.24,.24,[.94,.92,.83]);
+      cubeVerts(out,m.x-.04,m.y+.62+bob,m.z+.23,.12,.08,.12,[.9,.25,.08]);
+      cubeVerts(out,m.x-.1,m.y-.08,m.z-.06,.06,.25,.06,[.85,.55,.16]);
+      cubeVerts(out,m.x+.06,m.y-.08,m.z+.05,.06,.25,.06,[.85,.55,.16]);
+    }
+    // Tiny dark eyes on the front of each animal
+    cubeVerts(out,m.x-.12,m.y+.65+bob,m.z+.27,.045,.045,.025,[.04,.04,.04]);
+    cubeVerts(out,m.x+.08,m.y+.65+bob,m.z+.27,.045,.045,.025,[.04,.04,.04]);
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER,mobBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(out),gl.DYNAMIC_DRAW);
+  gl.vertexAttribPointer(aP,3,gl.FLOAT,false,24,0);gl.vertexAttribPointer(aC,3,gl.FLOAT,false,24,12);
+  gl.drawArrays(gl.TRIANGLES,0,out.length/6);
+}
+
+function drawGroundDrops(){var out=[];for(var i=0;i<groundDrops.length;i++){var d=groundDrops[i],c=slotColor(d.item),m=/rgb\((\d+),(\d+),(\d+)\)/.exec(c),col=m?[+m[1]/255,+m[2]/255,+m[3]/255]:[.75,.65,.45],bob=Math.sin(d.age*5)*.04;cubeVerts(out,d.x-.13,d.y-.13+bob,d.z-.13,.26,.26,.26,col);}if(!out.length)return;gl.bindBuffer(gl.ARRAY_BUFFER,mobBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(out),gl.DYNAMIC_DRAW);gl.vertexAttribPointer(aP,3,gl.FLOAT,false,24,0);gl.vertexAttribPointer(aC,3,gl.FLOAT,false,24,12);gl.drawArrays(gl.TRIANGLES,0,out.length/6);}
+
+// ---------- Render loop ----------
+function resize() {
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.floor(window.innerWidth * dpr);
+  canvas.height = Math.floor(window.innerHeight * dpr);
+}
+window.addEventListener("resize", resize);
+resize();
+
+function render() {
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  var nightMix=(gameTime>.55||gameTime<.20)?0.55:0;
+  gl.clearColor(0.53*(1-nightMix),0.81*(1-nightMix),0.92*(1-nightMix),1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  var proj = persp(70 * Math.PI / 180, canvas.width / canvas.height, 0.1, 300);
+  var view = mul(rotX(-P.pitch), mul(rotY(-P.yaw), trans(-P.x, -(P.y + 1.62), -P.z)));
+  gl.uniformMatrix4fv(uM, false, mul(proj, view));
+  for (var i = 0; i < chunks.length; i++) {
+    var ch = chunks[i];
+    if (!ch || !ch.n) continue;
+    gl.bindBuffer(gl.ARRAY_BUFFER, ch.buf);
+    gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 24, 0);
+    gl.vertexAttribPointer(aC, 3, gl.FLOAT, false, 24, 12);
+    gl.drawArrays(gl.TRIANGLES, 0, ch.n);
+  }
+  drawMobs();drawGroundDrops();
+}
+
+var last = performance.now(), frames = 0, acc = 0;
+function frame(now) {
+  var raw = (now - last) / 1000;
+  last = now;
+  if (document.pointerLockElement === canvas) update(Math.min(raw, 0.05));
+  render();
+  frames++; acc += raw;
+  if (acc >= 0.5) {
+    info.textContent = worldName+" · "+worldMode.toUpperCase()+" · FPS "+Math.round(frames/acc)+
+      " · XYZ "+P.x.toFixed(1)+" "+P.y.toFixed(1)+" "+P.z.toFixed(1)+" · E save";
+    frames = 0; acc = 0;
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---------- Start ----------
+refreshWorldList();
+ensureVisibleChunks(true);updateInventoryUI();drawHotbar();updateHUD();
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>
