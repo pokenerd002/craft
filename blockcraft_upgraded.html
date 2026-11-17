@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blockcraft</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#87ceeb;font-family:sans-serif}
+  canvas{width:100%;height:100%;display:block}
+  #cross{position:fixed;left:50%;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px;pointer-events:none}
+  #cross:before,#cross:after{content:"";position:absolute;background:#fff;mix-blend-mode:difference}
+  #cross:before{left:8px;top:0;width:2px;height:18px}
+  #cross:after{left:0;top:8px;width:18px;height:2px}
+  #hotbar{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);display:flex;gap:6px}
+  .slot{width:44px;height:44px;border:3px solid #333;box-sizing:border-box;opacity:.85}
+  .slot.sel{border-color:#fff;opacity:1}
+  #info{position:fixed;top:8px;left:8px;color:#fff;text-shadow:1px 1px 2px #000;font-size:13px;pointer-events:none}
+  #start{position:fixed;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5);color:#fff;text-align:center;cursor:pointer;line-height:1.7}
+
+  #menu{position:fixed;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;background:rgba(8,14,20,.88);color:#fff}
+  #menuPanel{width:min(560px,92vw);max-height:86vh;overflow:auto;background:#202b35;border:2px solid #718596;border-radius:14px;padding:22px;box-shadow:0 15px 55px #000}
+  #menu h1{margin:0 0 8px;font-size:32px;color:#b8e6ff}
+  #menu button,#menu input{font:inherit;border:1px solid #718596;border-radius:7px;padding:9px 12px;margin:4px;background:#344858;color:white}
+  #menu button{cursor:pointer;background:#386b50} #menu button:hover{filter:brightness(1.2)}
+  #worldList{display:grid;gap:7px;margin-top:12px}
+  .worldRow{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#2d3b47;padding:9px;border-radius:8px}
+  .worldRow small{display:block;color:#c3d0d8}
+  #survival{position:fixed;top:8px;right:12px;color:#fff;text-shadow:1px 2px 3px #000;font-weight:bold;text-align:right;pointer-events:none}
+  #toast{position:fixed;top:58px;left:50%;transform:translateX(-50%);color:white;background:#17232ddd;padding:8px 14px;border-radius:8px;display:none;pointer-events:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="cross"></div>
+<div id="hotbar"></div>
+<div id="info"></div><div id="survival"></div><div id="toast"></div>
+<div id="menu"><div id="menuPanel"><h1>Blockcraft</h1><p>Create a world or continue one you saved. Worlds are stored in this browser.</p><input id="worldName" maxlength="24" placeholder="World name" value="My World"><br><button id="createCreative">New Creative World</button><button id="createSurvival">New Survival World</button><button id="importWorld">Import World</button><input id="importFile" type="file" accept=".json,.blockcraft.json,application/json" style="display:none"><h3>Saved worlds</h3><div id="worldList"></div><p><small>Tip: your worlds save automatically in this browser. Use Export World for a backup.</small></p></div></div>
+<div id="start"><div>
+  <h1>Blockcraft</h1>
+  <div>Click to return to the game</div>
+  <div>WASD move &middot; Space jump &middot; Shift sprint</div>
+  <div>Mouse look &middot; Left click break &middot; Right click place</div>
+  <div>1&ndash;9 or scroll wheel to pick a block &middot; Esc to pause</div><div>Survival: collect blocks, watch your health and hunger!</div><div><button id="worldsButton" style="margin-top:12px;padding:8px 16px;cursor:pointer">Worlds / Save menu</button></div>
+</div></div>
+
+<script>
+(function () {
+"use strict";
+
+// ---------- World data ----------
+var W = 96, D = 96, H = 40, CS = 16;
+var NCX = W / CS, NCZ = D / CS;
+var world = new Uint8Array(W * D * H);
+var worldName = "My World", worldMode = "creative", currentWorldId = null;
+var health = 20, hunger = 20, mobs = [], saveClock = 0, damageClock = 0;
+var inventory = {};
+
+function idx(x, y, z) { return (y * D + z) * W + x; }
+function get(x, y, z) {
+  if (y < 0) return 1;
+  if (y >= H || x < 0 || z < 0 || x >= W || z >= D) return 0;
+  return world[idx(x, y, z)];
+}
+function solid(x, y, z) {
+  if (y < 0 || x < 0 || z < 0 || x >= W || z >= D) return true;
+  if (y >= H) return false;
+  return world[idx(x, y, z)] !== 0;
+}
+function set(x, y, z, b) {
+  if (x < 0 || z < 0 || y < 0 || x >= W || z >= D || y >= H) return;
+  world[idx(x, y, z)] = b;
+}
+
+// Block colors: [top, side, bottom] in RGB 0-255
+var COL = {
+  1: [[90,160,60],  [112,130,60], [121,85,58]],
+  2: [[121,85,58],  [121,85,58],  [121,85,58]],
+  3: [[125,125,125],[125,125,125],[125,125,125]],
+  4: [[170,135,80], [102,76,45],  [170,135,80]],
+  5: [[176,140,85], [176,140,85], [176,140,85]],
+  6: [[50,125,45],  [50,125,45],  [50,125,45]],
+  7: [[160,70,60],  [160,70,60],  [160,70,60]],
+  8: [[220,220,220],[190,190,190],[150,150,150]],
+  9: [[205,175,120],[165,125,75],[130,95,55]],
+  10:[[80,150,190],[55,115,155],[35,80,120]],
+  11:[[190,190,205],[145,145,165],[105,105,125]],
+  12:[[235,205,65],[190,155,35],[145,110,25]],
+  13:[[80,185,165],[50,145,125],[30,105,90]],
+  14:[[145,95,185],[110,65,150],[75,40,110]],
+  15:[[235,125,55],[190,85,30],[130,55,20]]
+};
+var BLOCK_NAMES = ["Grass","Dirt","Stone","Wood","Planks","Leaves","Brick","Sand","Snow","Water","Glass","Gold","Copper","Amethyst","Clay"];
+var HOT = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15];
+var sel = 0;
+
+// ---------- Terrain ----------
+function hash(x, z) { var n = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return n - Math.floor(n); }
+function hash3(x, y, z) { var n = Math.sin(x * 127.1 + y * 269.5 + z * 311.7) * 43758.5453; return n - Math.floor(n); }
+function noise(x, z) {
+  var xi = Math.floor(x), zi = Math.floor(z), xf = x - xi, zf = z - zi;
+  var u = xf * xf * (3 - 2 * xf), v = zf * zf * (3 - 2 * zf);
+  var a = hash(xi, zi), b = hash(xi + 1, zi), c = hash(xi, zi + 1), d = hash(xi + 1, zi + 1);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+function topY(x, z) {
+  for (var y = H - 1; y >= 0; y--) if (world[idx(x, y, z)]) return y;
+  return -1;
+}
+function generate() {
+  var x, y, z;
+  for (x = 0; x < W; x++) for (z = 0; z < D; z++) {
+    var h = Math.floor(8 + noise(x / 28, z / 28) * 12 + noise(x / 9, z / 9) * 4);
+    for (y = 0; y <= h; y++) {
+      var block = (y === h) ? 1 : (y > h - 4 ? 2 : 3);
+      if (y < h - 4 && y > 2 && hash3(x,y,z) > 0.992) block = hash3(x+9,y,z+4) > .5 ? 11 : 13;
+      world[idx(x, y, z)] = block;
+    }
+  }
+  for (x = 3; x < W - 3; x++) for (z = 3; z < D - 3; z++) {
+    if (hash(x * 5.7 + 1.3, z * 3.9 + 7.1) < 0.99) continue;
+    var ty = topY(x, z);
+    if (ty < 0 || world[idx(x, ty, z)] !== 1) continue;
+    var th = 4 + Math.floor(hash(x, z) * 2);
+    for (var dy = th - 1; dy <= th + 1; dy++)
+      for (var dx = -2; dx <= 2; dx++) for (var dz = -2; dz <= 2; dz++) {
+        if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
+        if (dy === th + 1 && (Math.abs(dx) > 1 || Math.abs(dz) > 1)) continue;
+        if (!get(x + dx, ty + dy, z + dz)) set(x + dx, ty + dy, z + dz, 6);
+      }
+    for (var t = 1; t <= th; t++) set(x, ty + t, z, 4);
+  }
+}
+
+// ---------- WebGL ----------
+var canvas = document.getElementById("c");
+var gl = canvas.getContext("webgl", { antialias: false });
+if (!gl) { document.body.innerHTML = "<p style='padding:20px'>WebGL isn't supported in this browser.</p>"; return; }
+
+function shader(type, src) {
+  var s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+var prog = gl.createProgram();
+gl.attachShader(prog, shader(gl.VERTEX_SHADER,
+  "attribute vec3 p;attribute vec3 c;uniform mat4 m;varying vec3 vc;varying float vd;" +
+  "void main(){gl_Position=m*vec4(p,1.0);vc=c;vd=gl_Position.w;}"));
+gl.attachShader(prog, shader(gl.FRAGMENT_SHADER,
+  "precision mediump float;varying vec3 vc;varying float vd;" +
+  "void main(){float f=clamp((vd-45.0)/60.0,0.0,1.0);" +
+  "gl_FragColor=vec4(mix(vc,vec3(0.53,0.81,0.92),f),1.0);}"));
+gl.linkProgram(prog);
+gl.useProgram(prog);
+var aP = gl.getAttribLocation(prog, "p");
+var aC = gl.getAttribLocation(prog, "c");
+var uM = gl.getUniformLocation(prog, "m");
+gl.enableVertexAttribArray(aP);
+gl.enableVertexAttribArray(aC);
+gl.enable(gl.DEPTH_TEST);
+
+// ---------- Matrices (column-major) ----------
+function mul(a, b) {
+  var o = new Float32Array(16);
+  for (var i = 0; i < 4; i++) for (var j = 0; j < 4; j++) {
+    var s = 0;
+    for (var k = 0; k < 4; k++) s += a[k * 4 + j] * b[i * 4 + k];
+    o[i * 4 + j] = s;
+  }
+  return o;
+}
+function persp(fov, asp, n, f) {
+  var t = 1 / Math.tan(fov / 2);
+  return new Float32Array([t / asp,0,0,0, 0,t,0,0, 0,0,(f + n) / (n - f),-1, 0,0,2 * f * n / (n - f),0]);
+}
+function rotY(a) { var c = Math.cos(a), s = Math.sin(a); return new Float32Array([c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1]); }
+function rotX(a) { var c = Math.cos(a), s = Math.sin(a); return new Float32Array([1,0,0,0, 0,c,s,0, 0,-s,c,0, 0,0,0,1]); }
+function trans(x, y, z) { return new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, x,y,z,1]); }
+
+// ---------- Meshing ----------
+var FACES = [
+  { n: [1,0,0],  s: 0.8,  k: 1, c: [[1,0,0],[1,1,0],[1,1,1],[1,0,1]] },
+  { n: [-1,0,0], s: 0.8,  k: 1, c: [[0,0,1],[0,1,1],[0,1,0],[0,0,0]] },
+  { n: [0,1,0],  s: 1.0,  k: 0, c: [[0,1,1],[1,1,1],[1,1,0],[0,1,0]] },
+  { n: [0,-1,0], s: 0.55, k: 2, c: [[0,0,0],[1,0,0],[1,0,1],[0,0,1]] },
+  { n: [0,0,1],  s: 0.7,  k: 1, c: [[1,0,1],[1,1,1],[0,1,1],[0,0,1]] },
+  { n: [0,0,-1], s: 0.7,  k: 1, c: [[0,0,0],[0,1,0],[1,1,0],[1,0,0]] }
+];
+var ORDER = [0, 1, 2, 0, 2, 3];
+
+function buildChunk(cx, cz) {
+  var out = [];
+  for (var y = 0; y < H; y++)
+    for (var z = cz * CS; z < cz * CS + CS; z++)
+      for (var x = cx * CS; x < cx * CS + CS; x++) {
+        var b = world[idx(x, y, z)];
+        if (!b) continue;
+        var v = 0.82 + hash3(x, y, z) * 0.30;
+        for (var f = 0; f < 6; f++) {
+          var F = FACES[f];
+          if (get(x + F.n[0], y + F.n[1], z + F.n[2])) continue;
+          var col = COL[b][F.k], sh = F.s * v * (0.90 + hash3(x*3+f,y*2,z*3)*0.18);
+          var r = col[0] / 255 * sh, g = col[1] / 255 * sh, bl = col[2] / 255 * sh;
+          for (var i = 0; i < 6; i++) {
+            var c = F.c[ORDER[i]];
+            out.push(x + c[0], y + c[1], z + c[2], r, g, bl);
+          }
+        }
+      }
+  return new Float32Array(out);
+}
+
+var chunks = [];
+function rebuild(cx, cz) {
+  if (cx < 0 || cz < 0 || cx >= NCX || cz >= NCZ) return;
+  var data = buildChunk(cx, cz);
+  var i = cz * NCX + cx;
+  var ch = chunks[i] || (chunks[i] = { buf: gl.createBuffer(), n: 0 });
+  gl.bindBuffer(gl.ARRAY_BUFFER, ch.buf);
+  gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+  ch.n = data.length / 6;
+}
+function edit(x, y, z, b) {
+  set(x, y, z, b);
+  var cx = Math.floor(x / CS), cz = Math.floor(z / CS);
+  rebuild(cx, cz);
+  if (x % CS === 0) rebuild(cx - 1, cz);
+  if (x % CS === CS - 1) rebuild(cx + 1, cz);
+  if (z % CS === 0) rebuild(cx, cz - 1);
+  if (z % CS === CS - 1) rebuild(cx, cz + 1);
+}
+
+// ---------- Player ----------
+var P = { x: W / 2 + 0.5, y: 0, z: D / 2 + 0.5, vy: 0, yaw: 0, pitch: 0, ground: false };
+var keys = {};
+
+function hits(px, py, pz) {
+  var x0 = Math.floor(px - 0.3), x1 = Math.floor(px + 0.3);
+  var y0 = Math.floor(py), y1 = Math.floor(py + 1.79);
+  var z0 = Math.floor(pz - 0.3), z1 = Math.floor(pz + 0.3);
+  for (var y = y0; y <= y1; y++) for (var z = z0; z <= z1; z++) for (var x = x0; x <= x1; x++)
+    if (solid(x, y, z)) return true;
+  return false;
+}
+function move(axis, d) {
+  var n = Math.ceil(Math.abs(d) / 0.2);
+  if (n === 0) return;
+  var s = d / n;
+  for (var i = 0; i < n; i++) {
+    if (axis === 0) P.x += s; else if (axis === 1) P.y += s; else P.z += s;
+    if (hits(P.x, P.y, P.z)) {
+      if (axis === 0) P.x -= s; else if (axis === 1) P.y -= s; else P.z -= s;
+      if (axis === 1) { if (d < 0) P.ground = true; P.vy = 0; }
+      return;
+    }
+  }
+}
+function update(dt) {
+  var sp = (keys.ShiftLeft || keys.ShiftRight) ? 7 : 4.5;
+  var fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
+  var rx = Math.cos(P.yaw), rz = -Math.sin(P.yaw);
+  var mx = 0, mz = 0;
+  if (keys.KeyW) { mx += fx; mz += fz; }
+  if (keys.KeyS) { mx -= fx; mz -= fz; }
+  if (keys.KeyD) { mx += rx; mz += rz; }
+  if (keys.KeyA) { mx -= rx; mz -= rz; }
+  var l = Math.sqrt(mx * mx + mz * mz);
+  if (l > 0) { mx = mx / l * sp; mz = mz / l * sp; }
+  P.vy -= 28 * dt;
+  if (P.vy < -40) P.vy = -40;
+  if (keys.Space && P.ground) P.vy = 9;
+  P.ground = false;
+  move(0, mx * dt);
+  move(2, mz * dt);
+  move(1, P.vy * dt);
+  saveClock += dt;
+  if (saveClock > 30) { saveClock = 0; saveWorld(false); }
+  if (worldMode === "survival") {
+    damageClock = Math.max(0, damageClock-dt);
+    if (Math.random() < dt * 0.012 && hunger > 0) hunger = Math.max(0,hunger-1);
+    if (hunger === 0 && damageClock === 0) { health=Math.max(0,health-1); damageClock=2.5; }
+    if (hunger > 15 && health < 20 && Math.random() < dt*.25) health++;
+    if (health <= 0) { health=20; hunger=15; var respY=topY(Math.floor(W/2),Math.floor(D/2));P.x=W/2+.5;P.z=D/2+.5;P.y=respY+1.1;P.vy=0;toast("You respawned!"); }
+    for (var mi=0; mi<mobs.length; mi++) {
+      var mob=mobs[mi], dx=P.x-mob.x, dz=P.z-mob.z, dist=Math.sqrt(dx*dx+dz*dz);
+      if (dist < 18 && dist > 1.1) { mob.x += dx/dist*dt*1.25; mob.z += dz/dist*dt*1.25; }
+      mob.phase += dt*4;
+      if (dist < 1.35 && damageClock===0) { health=Math.max(0,health-1); damageClock=1.2; }
+    }
+  }
+}
+
+// ---------- Block picking ----------
+function ray() {
+  var dx = -Math.sin(P.yaw) * Math.cos(P.pitch);
+  var dy = Math.sin(P.pitch);
+  var dz = -Math.cos(P.yaw) * Math.cos(P.pitch);
+  var ex = P.x, ey = P.y + 1.62, ez = P.z;
+  var lx = Math.floor(ex), ly = Math.floor(ey), lz = Math.floor(ez);
+  for (var t = 0; t < 6; t += 0.04) {
+    var x = Math.floor(ex + dx * t), y = Math.floor(ey + dy * t), z = Math.floor(ez + dz * t);
+    if (x >= 0 && z >= 0 && x < W && z < D && y >= 0 && y < H && world[idx(x, y, z)])
+      return { x: x, y: y, z: z, px: lx, py: ly, pz: lz };
+    lx = x; ly = y; lz = z;
+  }
+  return null;
+}
+function overlapsPlayer(x, y, z) {
+  return x + 1 > P.x - 0.3 && x < P.x + 0.3 && y + 1 > P.y && y < P.y + 1.8 && z + 1 > P.z - 0.3 && z < P.z + 0.3;
+}
+
+// ---------- Input ----------
+var startEl = document.getElementById("start");
+startEl.addEventListener("click", function () { canvas.requestPointerLock(); });
+document.addEventListener("pointerlockchange", function () {
+  startEl.style.display = document.pointerLockElement === canvas ? "none" : "flex";
+  if (document.pointerLockElement !== canvas) { keys = {}; saveWorld(false); }
+});
+document.addEventListener("mousemove", function (e) {
+  if (document.pointerLockElement !== canvas) return;
+  P.yaw -= e.movementX * 0.0022;
+  P.pitch -= e.movementY * 0.0022;
+  if (P.pitch > 1.55) P.pitch = 1.55;
+  if (P.pitch < -1.55) P.pitch = -1.55;
+});
+document.addEventListener("keydown", function (e) {
+  keys[e.code] = true;
+  if (e.code === "Space") e.preventDefault();
+  var m = /^Digit([1-9])$/.exec(e.code);
+  if (m) { sel = parseInt(m[1], 10) - 1; drawHotbar(); }
+});
+document.addEventListener("keyup", function (e) { keys[e.code] = false; });
+window.addEventListener("blur", function () { keys = {}; });
+document.addEventListener("wheel", function (e) {
+  sel = (sel + (e.deltaY > 0 ? 1 : -1) + HOT.length) % HOT.length;
+  drawHotbar();
+});
+canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+canvas.addEventListener("mousedown", function (e) {
+  if (document.pointerLockElement !== canvas) return;
+  var h = ray();
+  if (!h) return;
+  if (e.button === 0) {
+    var broken=world[idx(h.x,h.y,h.z)];
+    if (worldMode==="survival" && broken) inventory[broken]=(inventory[broken]||0)+1;
+    edit(h.x, h.y, h.z, 0); updateHUD();
+  } else if (e.button === 2 && !overlapsPlayer(h.px, h.py, h.pz)) {
+    var chosen=HOT[sel];
+    if (worldMode!=="survival" || (inventory[chosen]||0)>0) {
+      edit(h.px,h.py,h.pz,chosen);
+      if (worldMode==="survival") inventory[chosen]--;
+      updateHUD();
+    } else toast("You need to collect " + BLOCK_NAMES[chosen-1] + " first!");
+  }
+});
+
+
+// ---------- Multiple worlds, saving and survival HUD ----------
+var menu=document.getElementById("menu"), worldList=document.getElementById("worldList");
+var toastEl=document.getElementById("toast"), toastTimer=0;
+function toast(msg){toastEl.textContent=msg;toastEl.style.display="block";clearTimeout(toastTimer);toastTimer=setTimeout(function(){toastEl.style.display="none";},2200);}
+function encodeWorld(arr){
+  var parts=[], step=0x6000;
+  for(var i=0;i<arr.length;i+=step) parts.push(String.fromCharCode.apply(null,arr.subarray(i,Math.min(i+step,arr.length))));
+  return btoa(parts.join(""));
+}
+function decodeWorld(str){
+  var raw=atob(str), out=new Uint8Array(raw.length);
+  for(var i=0;i<raw.length;i++) out[i]=raw.charCodeAt(i);
+  return out;
+}
+function getWorlds(){try{return JSON.parse(localStorage.getItem("blockcraft_worlds_v2")||"{}");}catch(e){return {};}}
+function putWorlds(data){try{localStorage.setItem("blockcraft_worlds_v2",JSON.stringify(data));return true;}catch(e){toast("Storage is full. Export or delete a world.");return false;}}
+function saveWorld(show){
+  if(!currentWorldId) return;
+  var all=getWorlds();
+  all[currentWorldId]={id:currentWorldId,name:worldName,mode:worldMode,terrain:encodeWorld(world),player:{x:P.x,y:P.y,z:P.z,yaw:P.yaw,pitch:P.pitch},health:health,hunger:hunger,inventory:inventory,mobs:mobs,updated:Date.now()};
+  var ok=putWorlds(all); if(show&&ok) toast("World saved!");
+}
+function refreshWorldList(){
+  var all=getWorlds(); worldList.innerHTML="";
+  var ids=Object.keys(all).sort(function(a,b){return (all[b].updated||0)-(all[a].updated||0);});
+  if(!ids.length){worldList.innerHTML="<p>No saved worlds yet.</p>";return;}
+  ids.forEach(function(id){
+    var w=all[id], row=document.createElement("div"); row.className="worldRow";
+    var label=document.createElement("div"); label.innerHTML="<strong></strong><small></small>";
+    label.firstChild.textContent=w.name; label.lastChild.textContent=(w.mode==="survival"?"Survival":"Creative")+" · "+new Date(w.updated||Date.now()).toLocaleString();
+    var actions=document.createElement("div"), load=document.createElement("button"), del=document.createElement("button"), exp=document.createElement("button");
+    load.textContent="Load"; load.onclick=function(){loadWorld(id);};
+    del.textContent="Delete"; del.onclick=function(){if(confirm("Delete "+w.name+"?")){var a=getWorlds();delete a[id];putWorlds(a);refreshWorldList();}};
+    exp.textContent="Export"; exp.onclick=function(){var blob=new Blob([JSON.stringify(w)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=(w.name||"world").replace(/[^a-z0-9_-]/gi,"_")+".blockcraft.json";a.click();URL.revokeObjectURL(url);};
+    actions.appendChild(load);actions.appendChild(exp);actions.appendChild(del);row.appendChild(label);row.appendChild(actions);worldList.appendChild(row);
+  });
+}
+function resetWorld(name,mode){
+  world.fill(0); worldName=name||"My World";worldMode=mode;currentWorldId="world_"+Date.now()+"_"+Math.floor(Math.random()*9999);
+  P.x=W/2+.5;P.z=D/2+.5;P.y=10;P.vy=0;P.yaw=0;P.pitch=0;health=20;hunger=20;
+  inventory={}; HOT.forEach(function(b){inventory[b]=mode==="creative"?999:0;});
+  mobs=[];generate();var sy=topY(Math.floor(P.x),Math.floor(P.z));P.y=sy+1.01;
+  for(var m=0;m<(mode==="survival"?9:4);m++){
+    var mx=8+Math.floor(Math.random()*(W-16)),mz=8+Math.floor(Math.random()*(D-16)),my=topY(mx,mz);
+    if(my>0)mobs.push({x:mx+.5,y:my+1,z:mz+.5,phase:Math.random()*6,type:m%3});
+  }
+  for(var cz=0;cz<NCZ;cz++)for(var cx=0;cx<NCX;cx++)rebuild(cx,cz);
+  menu.style.display="none";startEl.style.display="flex";drawHotbar();updateHUD();saveWorld(false);
+}
+function loadWorld(id){
+  var w=getWorlds()[id];if(!w)return;
+  try{var data=decodeWorld(w.terrain);if(data.length!==world.length)throw new Error("Wrong world size");
+    world.set(data);worldName=w.name;worldMode=w.mode||"creative";currentWorldId=id;
+    var p=w.player||{};P.x=p.x||W/2;P.y=p.y||12;P.z=p.z||D/2;P.yaw=p.yaw||0;P.pitch=p.pitch||0;P.vy=0;
+    health=w.health==null?20:w.health;hunger=w.hunger==null?20:w.hunger;inventory=w.inventory||{};mobs=w.mobs||[];
+    for(var cz=0;cz<NCZ;cz++)for(var cx=0;cx<NCX;cx++)rebuild(cx,cz);
+    menu.style.display="none";startEl.style.display="flex";drawHotbar();updateHUD();toast("Loaded "+worldName);
+  }catch(e){alert("Could not load this world: "+e.message);}
+}
+function updateHUD(){
+  document.getElementById("survival").textContent=worldMode==="survival"?
+    "♥ "+health+"/20   Food "+hunger+"/20   Mobs "+mobs.length:
+    "CREATIVE · "+worldName;
+}
+document.getElementById("worldsButton").onclick=function(e){e.stopPropagation();if(document.pointerLockElement===canvas)document.exitPointerLock();menu.style.display="flex";refreshWorldList();};
+document.getElementById("importWorld").onclick=function(){document.getElementById("importFile").click();};
+document.getElementById("importFile").onchange=function(e){var file=e.target.files[0];if(!file)return;var reader=new FileReader();reader.onload=function(){try{var w=JSON.parse(reader.result);if(!w.terrain||!w.name)throw new Error("This file is not a Blockcraft world");var id="import_"+Date.now();w.id=id;w.updated=Date.now();var all=getWorlds();all[id]=w;if(putWorlds(all)){refreshWorldList();toast("World imported!");}}catch(err){alert("Could not import world: "+err.message);}e.target.value="";};reader.readAsText(file);};
+document.getElementById("createCreative").onclick=function(){resetWorld(document.getElementById("worldName").value.trim()||"My World","creative");};
+document.getElementById("createSurvival").onclick=function(){resetWorld(document.getElementById("worldName").value.trim()||"My World","survival");};
+window.addEventListener("beforeunload",function(){saveWorld(false);});
+window.addEventListener("storage",refreshWorldList);
+document.addEventListener("keydown",function(e){
+  if(e.code==="Escape"&&document.pointerLockElement!==canvas){menu.style.display="flex";refreshWorldList();}
+  if(e.code==="KeyE"&&document.pointerLockElement===canvas){saveWorld(true);}
+});
+
+// ---------- HUD ----------
+var hotbar = document.getElementById("hotbar");
+var info = document.getElementById("info");
+function drawHotbar() {
+  hotbar.innerHTML = "";
+  for (var i = 0; i < HOT.length; i++) {
+    var d = document.createElement("div");
+    var c = COL[HOT[i]][1];
+    d.className = "slot" + (i === sel ? " sel" : "");
+    d.style.background = "linear-gradient(135deg,rgba(255,255,255,.22),transparent 45%),rgb(" + c[0] + "," + c[1] + "," + c[2] + ")";
+    d.title = BLOCK_NAMES[HOT[i]-1] + (worldMode==="survival" ? " ("+(inventory[HOT[i]]||0)+")" : "");
+    d.textContent = String(i+1);
+    d.style.color="#fff";d.style.fontSize="11px";d.style.textShadow="1px 1px 2px #000";
+    hotbar.appendChild(d);
+  }
+}
+
+
+// Simple low-poly block creatures, drawn in the same world-space mesh as terrain.
+var mobBuffer=gl.createBuffer();
+function cubeVerts(out,x,y,z,sx,sy,sz,color){
+  var faces=[
+    [[1,0,0],[[1,0,0],[1,1,0],[1,1,1],[1,0,1]]],
+    [[-1,0,0],[[0,0,1],[0,1,1],[0,1,0],[0,0,0]]],
+    [[0,1,0],[[0,1,1],[1,1,1],[1,1,0],[0,1,0]]],
+    [[0,-1,0],[[0,0,0],[1,0,0],[1,0,1],[0,0,1]]],
+    [[0,0,1],[[1,0,1],[1,1,1],[0,1,1],[0,0,1]]],
+    [[0,0,-1],[[0,0,0],[0,1,0],[1,1,0],[1,0,0]]]
+  ];
+  for(var f=0;f<6;f++){var shade=[.75,.75,1,.55,.7,.7][f];for(var j=0;j<6;j++){var q=faces[f][1][ORDER[j]];out.push(x+q[0]*sx,y+q[1]*sy,z+q[2]*sz,color[0]*shade,color[1]*shade,color[2]*shade);}}
+}
+function drawMobs(){
+  var out=[];
+  for(var i=0;i<mobs.length;i++){
+    var m=mobs[i], bob=Math.sin(m.phase)*.05, skin=m.type===0?[.35,.72,.28]:m.type===1?[.38,.62,.72]:[.48,.42,.38];
+    cubeVerts(out,m.x-.28,m.y+bob,m.z-.22,.56,.72,.44,skin);
+    cubeVerts(out,m.x-.22,m.y+.62+bob,m.z-.25,.44,.42,.5,skin.map(function(v){return Math.min(1,v*1.18);}));
+    cubeVerts(out,m.x-.13,m.y+.78+bob,m.z+.20,.07,.07,.025,[.05,.05,.05]);
+    cubeVerts(out,m.x+.08,m.y+.78+bob,m.z+.20,.07,.07,.025,[.05,.05,.05]);
+    cubeVerts(out,m.x-.22,m.y-.25,m.z-.16,.18,.28,.18,skin);
+    cubeVerts(out,m.x+.06,m.y-.25,m.z+.02,.18,.28,.18,skin);
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER,mobBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(out),gl.DYNAMIC_DRAW);
+  gl.vertexAttribPointer(aP,3,gl.FLOAT,false,24,0);gl.vertexAttribPointer(aC,3,gl.FLOAT,false,24,12);
+  gl.drawArrays(gl.TRIANGLES,0,out.length/6);
+}
+
+// ---------- Render loop ----------
+function resize() {
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.floor(window.innerWidth * dpr);
+  canvas.height = Math.floor(window.innerHeight * dpr);
+}
+window.addEventListener("resize", resize);
+resize();
+
+function render() {
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.clearColor(0.53, 0.81, 0.92, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  var proj = persp(70 * Math.PI / 180, canvas.width / canvas.height, 0.1, 300);
+  var view = mul(rotX(-P.pitch), mul(rotY(-P.yaw), trans(-P.x, -(P.y + 1.62), -P.z)));
+  gl.uniformMatrix4fv(uM, false, mul(proj, view));
+  for (var i = 0; i < chunks.length; i++) {
+    var ch = chunks[i];
+    if (!ch || !ch.n) continue;
+    gl.bindBuffer(gl.ARRAY_BUFFER, ch.buf);
+    gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 24, 0);
+    gl.vertexAttribPointer(aC, 3, gl.FLOAT, false, 24, 12);
+    gl.drawArrays(gl.TRIANGLES, 0, ch.n);
+  }
+  drawMobs();
+}
+
+var last = performance.now(), frames = 0, acc = 0;
+function frame(now) {
+  var raw = (now - last) / 1000;
+  last = now;
+  if (document.pointerLockElement === canvas) update(Math.min(raw, 0.05));
+  render();
+  frames++; acc += raw;
+  if (acc >= 0.5) {
+    info.textContent = worldName+" · "+worldMode.toUpperCase()+" · FPS "+Math.round(frames/acc)+
+      " · XYZ "+P.x.toFixed(1)+" "+P.y.toFixed(1)+" "+P.z.toFixed(1)+" · E save";
+    frames = 0; acc = 0;
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---------- Start ----------
+refreshWorldList();
+drawHotbar();updateHUD();
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>
